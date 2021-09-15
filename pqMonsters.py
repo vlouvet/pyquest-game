@@ -2,7 +2,7 @@ import random
 
 class npcMonster:
     def __init__(self, level=1):
-        self.name = "wildling"
+        self.name = self.chooseType()
         self.race = "none"
         self.strength = 1
         self.intelligence = 1
@@ -24,64 +24,12 @@ class npcMonster:
 
     def chooseType(self):
         animalAscii = {}
-        animalAscii['elephant'] = """
-            ___     _,.--.,_
-        .-~   ~--"~-.   ._ "-.
-        /      ./_    Y    "-. \
-        Y       :~     !         Y
-        lq p    |     /         .|
-    _   \. .-, l    /          |j
-    ()\___) |/   \_/";          !
-    \._____.-~\  .  ~\.      ./
-                Y_ Y_. "vr"~  T
-                (  (    |L    j   
-                [nn[nn..][nn..]
-        ~~~~~~~~~~~~~~~~~~~~~~~"""
-
-        animalAscii['giraffe'] = """\
-                ._ o o
-                \_`-)|_
-            ,""       \ 
-            ,"  ## |   ಠ ಠ. 
-        ," ##   ,-\__    `.
-        ,"       /     `--._;)
-    ,"     ## /
-    ,"   ##    /
-                    """
+        animalAscii['elephant'] = "elephant"
         
-        animalAscii['Gryffon'] = """
-                                   _
-                          _)\.-.
-         .-.__,___,_.-=-. )\`  a`\_
-     .-.__\__,__,__.-=-. `/  \     `\
-     {~,-~-,-~.-~,-,;;;;\ |   '--;`)/
-      \-,~_-~_-,~-,(_(_(;\/   ,;/
-       ",-.~_,-~,-~,)_)_)'.  ;;(
-         `~-,_-~,-~(_(_(_(_\  `;\
-   ,          `"~~--,)_)_)_)\_   \
-   |\              (_(_/_(_,   \  ;
-   \ '-.       _.--'  /_/_/_)   | |
-    '--.\    .'          /_/    | |
-        ))  /       \      |   /.'
-       //  /,        | __.'|  ||
-      //   ||        /`    (  ||
-     ||    ||      .'       \ \\
-     ||    ||    .'_         \ \\
-      \\   //   / _ `\        \ \\__
-       \'-'/(   _  `\,;        \ '--:,
-        `"`  `"` `-,,;         `"`",,; """
+        animalAscii['giraffe'] = "giraffe"
+        
+        animalAscii['Gryffon'] = "gryffon"
 
-        animalAscii['Dragon'] = """
-            (  )   /\   _                 (     
-        \ |  (  \ ( \.(               )                      _____
-    \  \ \  `  `   ) \             (  ___                 / _   \
-    (_`    \+   . x  ( .\            \/   \____-----------/ (o)   \_
-    - .-               \+  ;          (  O                           \____
-                            )        \_____________  `              \  /
-    (__                +- .( -'.- <. - _  VVVVVVV VV V\                 \/
-    (_____            ._._: <_ - <- _  (--  _AAAAAAA__A_/                  |
-    .    /./.+-  . .- /  +--  - .     \______________//_              \_______
-    (__ ' /x  / x _/ (                                  \___'          \     /
-    , x / ( '  . / .  /                                      |           \   /
-        /  /  _/ /    +                                      /              \/
-    '  (__/                                             /                  \ """
+        animalAscii['Dragon'] = "dragon"
+
+        return random.choice(list(animalAscii.values()))

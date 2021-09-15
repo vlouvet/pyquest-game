@@ -11,7 +11,16 @@ class pyquestHelper:
         print("command list")
         print("stats - show stats")
         print("play - play the game")
-        print("help - show this help file")
+        print("help - show this help menu")
+        print("exit - exit the game")
+
+    def fightHelp(self, pfChar):
+        print("Fight command list")
+        print("[a]ttack")
+        if pfChar.chrClass == "wiz":
+            print("[m]agic")
+        print("[h]elp - show this help menu")
+        print("[fl]ee")
         print("exit - exit the game")
 
     def clearScreen(self):

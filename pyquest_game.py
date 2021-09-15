@@ -52,15 +52,14 @@ def gameLoop(pc, gameObj):
     current_tile = generate_tile()
     while pc.hitpoints is not None and pc.hitpoints > 0:
         getChrInput = input("What to do Next?")
-        if getChrInput == "rest":
+        if getChrInput == "rest" or getChrInput == "r" :
             if pc.hitpoints < pc.maxhp:
-                print(pc.hitpoints)
-                print(pc.maxhp)
+                print(f"Currently Have {pc.hitpoints} out of {pc.maxhp} hitpoints")
                 pc.doRestHP()
                 if pc.expPoints >= pc.nextLevelExp:
                     pc.doLevelUp()
                 pc.getStats()
-        elif getChrInput == "move":
+        elif getChrInput == "move" or  getChrInput == "m" :
             current_tile = generate_tile()
             print(current_tile.tile_content_type)
             if current_tile.tile_content_type == "monster":
@@ -69,11 +68,11 @@ def gameLoop(pc, gameObj):
                 print(
                     "you find a scenic path, but nothing of interests catches your eye."
                 )
-        elif getChrInput == "loot":
+        elif getChrInput == "loot" or getChrInput == "l" :
             if current_tile.tile_content_type == "treasure":
                 print("beautiful treasure!")
             print("you look for loot but find none!")
-        elif getChrInput == "stats":
+        elif getChrInput == "stats" or getChrInput == "s":
             pc.getStats()
         elif getChrInput == "exit":
             print(f"you arrived to tile number: {current_tile.tile_id}")
@@ -81,7 +80,7 @@ def gameLoop(pc, gameObj):
             exit()
         elif getChrInput == "help":
             print("Command list:")
-            print("rest, move, loot, stats, exit, help")
+            print("[r]est, [m]ove, [l]oot, [s]tats, exit, [h]elp")
         # enable for faster death!
         # movePenalty(pc)
         # gameObj.clearScreen()
@@ -92,15 +91,33 @@ def gameLoop(pc, gameObj):
 
 
 def fightLoop(pc, current_tile):
+    monsterObj = pqMonsters.npcMonster(pc.chrLevel)
+    print(f"Suddenly a {monsterObj.name} appears!")
     current_tile.tile_content = "FIGHT TO THE DEATH"
     print(f"tile content: {current_tile.tile_content}")
-    monsterObj = pqMonsters.npcMonster(pc.chrLevel)
     turnCount = 0
     while pc.hitpoints > 0 and monsterObj.hitpoints > 0:
         turnCount += 1
         print(f"Turn Count: {turnCount}")
-        monsterObj.doAttack(pc)
-        pc.doAttack(monsterObj)
+        fightCommand = input("What is your next Fight Move?")
+        if fightCommand == "attack" or fightCommand == "a":
+            pc.doAttack(monsterObj)
+        elif fightCommand == "magic" or fightCommand == "m":
+            if pc.chrClass != "wiz":
+                print("You have no magic!")
+            else:
+                pc.doMagic(monsterObj)
+        elif fightCommand == "help":
+            gameObj.fightHelp(pc)            
+        elif fightCommand == "flee" or fightCommand == "fl":
+            if pc.doFlee(monsterObj):
+                break
+            else:
+                print("You're not able to run away!")
+                pass
+        if monsterObj.hitpoints >0:
+            monsterObj.doAttack(pc)
+        
     if monsterObj.hitpoints <= 0:
         pc.setExp(monsterObj)
     pass
