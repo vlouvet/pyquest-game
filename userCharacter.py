@@ -108,6 +108,8 @@ class playerCharacter:
 
     def doAttack(self, monsterObj):
         attackDamage = random.randint(1, self.chrLevel)
+        #strength modifier add 1/10th of character's strength rating to attackDamage
+        attackDamage += 10/self.strength 
         critRoll = random.randrange(1, 10, 1)
         if critRoll == 5:
             attackDamage = attackDamage * 2
