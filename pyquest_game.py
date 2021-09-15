@@ -4,6 +4,45 @@ import userCharacter
 import pqMonsters
 import gameTile
 import random
+from flask import Flask, request, jsonify
+
+app = Flask("__name__")
+
+@app.route("/play", methods=['POST', 'GET'])
+def greet_user():
+    error = None
+    if request.method == 'POST':
+        print(request.data)
+    # the code below is executed if the request method
+    # was GET or the credentials were invalid
+    return greetHero()
+
+
+@app.route("/newplayer", methods=['POST', 'GET'])
+def new_char():
+    error = None
+    if request.method == 'POST':
+        req_data = json.loads(request.data.decode('utf-8'))
+        pc = userCharacter.playerCharacter(req_data['name'])
+    # the code below is executed if the request method
+    # was GET or the credentials were invalid
+    return gameIntro(pc)
+
+@app.route("/chooseClass", methods=['POST', 'GET'])
+def set_raceNclass():
+    error = None
+    if request.method == 'POST':
+        req_data = json.loads(request.data.decode('utf-8'))
+        pc = userCharacter.playerCharacter(req_data['pc'])
+        pc.setRace()
+        pc.setClass()
+        pc.setStats()
+    return charStart(pc)
+    # gameObj = gameHelper.pyquestHelper()
+
+
+    
+
 
 
 with open("game_config.ini", "r") as fin:
@@ -30,10 +69,11 @@ def generate_tile():
 
 
 def greetHero():
-    print("Hello Weary traveler, I think I've seen you before.")
-    print("What was your name again?")
-    while pc.name == "" or pc.name == "player1":
-        pc.setName()
+    greet_message = "Hello Weary traveler, I think I've seen you before.\n"
+    greet_message += "What was your name again?"
+    # while pc.name == "" or pc.name == "player1":
+    #     pc.setName()
+    return {'greet_message': greet_message}
 
 
 def movePenalty(pc):
@@ -41,11 +81,18 @@ def movePenalty(pc):
 
 
 def gameIntro(pc):
-    print("Welcome to Pyquest!")
-    print("the story begins on a cold dark night...")
-    print(f"our hero, {pc.name}, goes out looking for adventure...")
-    print("when suddenly!")
+    intro_message = "Welcome to Pyquest!"
+    intro_message += "the story begins on a cold dark night..."
+    intro_message += f"our hero, {pc.name}, goes out looking for adventure..."
+    intro_message += "when suddenly!"
 
+    return {'intro_message': intro_message,
+            'next_page': 'set_raceNclass'}
+
+
+def charStart(pc):
+    CharacterMessage = pc.getStats()
+    return {'charMessage': CharacterMessage, 'next_page':'/tile/1'}
 
 def gameLoop(pc, gameObj):
     pc.setStats()
@@ -123,24 +170,19 @@ def fightLoop(pc, current_tile):
     pass
 
 
-gameObj = gameHelper.pyquestHelper()
-pc = userCharacter.playerCharacter("player1")
-gameIntro(pc)
-greetHero()
-pc.setRace()
-pc.setClass()
 
-print("Main Menu\nType help for a list of commands\n")
-chrCommand = input("")
-while chrCommand != "exit":
-    if chrCommand == "help":
-        gameObj.showHelp()
-        chrCommand = input("Main Menu\nType help for a list of commands\n")
-    elif chrCommand == "stats":
-        pc.getStats()
-        chrCommand = input("Main Menu\nType help for a list of commands\n")
-    elif chrCommand == "play":
-        gameLoop(pc, gameObj)
-        chrCommand = input("Main Menu\nType help for a list of commands\n")
-    else:
-        chrCommand = input("Main Menu\nType help for a list of commands\n")
+
+# print("Main Menu\nType help for a list of commands\n")
+# chrCommand = input("")
+# while chrCommand != "exit":
+#     if chrCommand == "help":
+#         gameObj.showHelp()
+#         chrCommand = input("Main Menu\nType help for a list of commands\n")
+#     elif chrCommand == "stats":
+#         pc.getStats()
+#         chrCommand = input("Main Menu\nType help for a list of commands\n")
+#     elif chrCommand == "play":
+#         gameLoop(pc, gameObj)
+#         chrCommand = input("Main Menu\nType help for a list of commands\n")
+#     else:
+#         chrCommand = input("Main Menu\nType help for a list of commands\n")

@@ -105,6 +105,8 @@ class playerCharacter:
         print(f"Hitpoints: {self.hitpoints}/{self.maxhp}")
         print(f"Experience Points: {self.expPoints}/{self.nextLevelExp}")
         print(f"Character level: {self.chrLevel}")
+        json_output = {'name': self.name, 'race': self.race, 'class':self.chrClass}
+        return json_output
 
     def doAttack(self, monsterObj):
         attackDamage = random.randint(1, self.chrLevel)
