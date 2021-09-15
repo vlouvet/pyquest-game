@@ -17,7 +17,6 @@ def greet_user():
     # was GET or the credentials were invalid
     return greetHero()
 
-
 @app.route("/newplayer", methods=['POST', 'GET'])
 def new_char():
     error = None
@@ -34,23 +33,19 @@ def set_raceNclass():
     if request.method == 'POST':
         req_data = json.loads(request.data.decode('utf-8'))
         pc = userCharacter.playerCharacter(req_data['pc'])
-        pc.setRace()
-        pc.setClass()
+        pc.setRace(req_data)
+        pc.setClass(req_data)
         pc.setStats()
     return charStart(pc)
     # gameObj = gameHelper.pyquestHelper()
 
 
-    
-
-
-
+@app.route("/game/tile/<int:tileid>/", methods=['POST', 'GET'])
+def game_tile(tileid):
+    return {'statusCode': 'success'}
 with open("game_config.ini", "r") as fin:
     config_json = json.load(fin)
-
-
 tile_config = gameTile.pqGameTile()
-
 
 def generate_tile():
     # generate a new tile

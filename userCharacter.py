@@ -23,23 +23,27 @@ class playerCharacter:
             print("Exit requested")
             exit()
 
-    def setClass(self):
-        userInput = input("what is your class?\n[wiz,pldn,warr]\n")
-        if userInput == "exit":
-            exit()
-        elif userInput not in ["wiz", "pldn", "warr"]:
-            print("that is not a valid class, Try again!")
-            self.getClass()
-        else:
-            self.chrClass = userInput
+    def setClass(self, request_data):
+        # userInput = input("what is your class?\n[wiz,pldn,warr]\n")
+        # if userInput == "exit":
+        #     exit()
+        # elif userInput not in ["wiz", "pldn", "warr"]:
+        #     print("that is not a valid class, Try again!")
+        #     self.getClass()
+        # else:
+        #     self.chrClass = userInput
+        self.chrClass = request_data['pc']['chrClass']
+        return self.chrClass
 
-    def setRace(self):
-        userInput = input("what is your race?\n[elf,hbt,kjt]\n")
-        if userInput not in ["elf", "hbt", "kjt"]:
-            print("that is not a valid class, Try again!")
-            self.getRace()
-        else:
-            self.race = userInput
+    def setRace(self, request_data):
+        # userInput = input("what is your race?\n[elf,hbt,kjt]\n")
+        # if userInput not in ["elf", "hbt", "kjt"]:
+        #     print("that is not a valid class, Try again!")
+        #     self.getRace()
+        # else:
+        print(type(request_data))
+        self.race = request_data['pc']['race']
+        return self.race
 
     def setStats(self):
         # start by setting all stats to default values
