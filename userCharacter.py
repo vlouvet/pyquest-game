@@ -84,7 +84,7 @@ class playerCharacter:
             self.intelligence -= 5
             self.stealth -= 5
             self.maxhp = self.maxhp * 1.5
-        self.hitpoints = self.hitpoints
+        self.hitpoints = self.maxhp
 
     def setDead(self, tileObj):
         print(f"Congrats! you died after {tileObj.tile_id} tiles.")
@@ -97,6 +97,8 @@ class playerCharacter:
             self.expPoints += 5
 
     def getStats(self):
+        print(f"Race: {self.race}")
+        print(f"Class: {self.chrClass}")
         print(f"Intelligence: {self.intelligence}")
         print(f"Strength: {self.strength}")
         print(f"Stealth: {self.stealth}")
