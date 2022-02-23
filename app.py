@@ -8,39 +8,42 @@ import gameTile
 
 
 app = Flask("__name__")
-app.config['SECRET_KEY'] = '7'
+app.config["SECRET_KEY"] = "7"
 if __name__ == "__main__":
     app.run()
 
-@app.route("/play", methods=['POST', 'GET'])
+
+@app.route("/play", methods=["POST", "GET"])
 def greet_user():
     form = gameforms.NameForm()
-    if request.method == 'POST':
+    if request.method == "POST":
         if form.validate_on_submit():
             pass
-        return redirect('/newplayer')
+        return redirect("/newplayer")
     else:
         # the code below is executed if the request method
         # was GET or the credentials were invalid
-        #greet_hero()
-        return render_template('playgame.html', form=form)
+        # greet_hero()
+        return render_template("playgame.html", form=form)
 
-@app.route("/newplayer", methods=['POST', 'GET'])
+
+@app.route("/newplayer", methods=["POST", "GET"])
 def new_char():
     form = gameforms.CharacterForm()
     player_char = ""
-    if request.method == 'POST':
-        req_data = json.loads(request.data.decode('utf-8'))
-        player_char = userCharacter.playerCharacter(req_data['name'])
+    if request.method == "POST":
+        req_data = json.loads(request.data.decode("utf-8"))
+        player_char = userCharacter.playerCharacter(req_data["name"])
     # the code below is executed if the request method
     # was GET or the credentials were invalid
-    return render_template('charsetup.html', form=form, player_char=player_char)
+    return render_template("charsetup.html", form=form, player_char=player_char)
 
-@app.route("/chooseClass", methods=['POST', 'GET'])
+
+@app.route("/chooseClass", methods=["POST", "GET"])
 def set_race_and_class():
-    if request.method == 'POST':
-        req_data = json.loads(request.data.decode('utf-8'))
-        player_char = userCharacter.playerCharacter(req_data['pc'])
+    if request.method == "POST":
+        req_data = json.loads(request.data.decode("utf-8"))
+        player_char = userCharacter.playerCharacter(req_data["pc"])
         player_char.set_race()
         player_char.set_class()
         player_char.set_stats()
@@ -75,7 +78,7 @@ def greet_hero():
     greet_message += "What was your name again?"
     # while pc.name == "" or pc.name == "player1":
     #     pc.setName()
-    return {'greet_message': greet_message}
+    return {"greet_message": greet_message}
 
 
 def move_penalty(player_char):
@@ -88,13 +91,12 @@ def game_intro(player_char):
     intro_message += f"our hero, {player_char.name}, goes out looking for adventure..."
     intro_message += "when suddenly!"
 
-    return {'intro_message': intro_message,
-            'next_page': 'set_raceNclass'}
+    return {"intro_message": intro_message, "next_page": "set_raceNclass"}
 
 
 def char_start(player_char):
     char_message = player_char.getStats()
-    return {'charMessage': char_message, 'next_page':'/tile/1'}
+    return {"charMessage": char_message, "next_page": "/tile/1"}
 
 
 def game_loop(player_char, game_obj):
@@ -102,15 +104,17 @@ def game_loop(player_char, game_obj):
     current_tile = generate_tile()
     while player_char.hitpoints is not None and player_char.hitpoints > 0:
         char_input = input("What to do Next?")
-        if char_input == "rest" or char_input == "r" :
+        if char_input == "rest" or char_input == "r":
             if player_char.hitpoints < player_char.maxhp:
-                print('''Currently Have {player_char.hitpoints}
-                 out of {player_char.maxhp} hitpoints''')
+                print(
+                    """Currently Have {player_char.hitpoints}
+                 out of {player_char.maxhp} hitpoints"""
+                )
                 player_char.doRestHP()
                 if player_char.expPoints >= player_char.nextLevelExp:
                     player_char.doLevelUp()
                 player_char.getStats()
-        elif char_input == "move" or  char_input == "m" :
+        elif char_input == "move" or char_input == "m":
             current_tile = generate_tile()
             print(current_tile.tile_content_type)
             if current_tile.tile_content_type == "monster":
@@ -119,7 +123,7 @@ def game_loop(player_char, game_obj):
                 print(
                     "you find a scenic path, but nothing of interests catches your eye."
                 )
-        elif char_input == "loot" or char_input == "l" :
+        elif char_input == "loot" or char_input == "l":
             if current_tile.tile_content_type == "treasure":
                 print("beautiful treasure!")
             print("you look for loot but find none!")
@@ -165,7 +169,7 @@ def fight_loop(player_char, current_tile, game_obj):
                 break
             else:
                 print("You're not able to run away!")
-        if monster_obj.hitpoints >0:
+        if monster_obj.hitpoints > 0:
             monster_obj.do_attack(player_char)
 
     if monster_obj.hitpoints <= 0:

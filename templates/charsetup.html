@@ -13,12 +13,18 @@
     <h1>PyQuest Game</h1>
     <h2>Character setup</h2>
     <div>Welcome {{player_char.name}}, lets get to know you...</div>
-    <form action="/newplayer" method="post">
-        {% for form_field in form %}
-            <div>{{ form_field.label }}: {{ form_field.name }}</div>
-        {% endfor %}
-        <input type="submit" value="Go">
-    </form>
 
+    {% from "_formhelpers.html" import render_field %} 
+    <form method=post action="/newplayer">
+        <dl>
+            {{render_field(form.name)}}
+            {{render_field(form.charclass)}}
+            {{render_field(form.race)}}
+        </dl>
+        <p><input type=submit value="Setup"></p>
+        {% if error %}
+        <p class="error"><strong>Error:</strong>{{ error}}</p>
+        {% endif %}
+    </form>
 </body>
 </html>
