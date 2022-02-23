@@ -4,7 +4,7 @@ import userCharacter
 import pqMonsters
 import gameTile
 import random
-from flask import Flask, request, jsonify
+from flask import Flask, request
 
 app = Flask("__name__")
 
@@ -110,7 +110,7 @@ def gameLoop(pc, gameObj):
             current_tile = generate_tile()
             print(current_tile.tile_content_type)
             if current_tile.tile_content_type == "monster":
-                fightLoop(pc, current_tile)
+                fightLoop(pc, current_tile, gameObj)
             elif current_tile.tile_content_type == "scene":
                 print(
                     "you find a scenic path, but nothing of interests catches your eye."
@@ -137,7 +137,7 @@ def gameLoop(pc, gameObj):
     gameObj.createHighScore(current_tile, pc)
 
 
-def fightLoop(pc, current_tile):
+def fightLoop(pc, current_tile, gameObj):
     monsterObj = pqMonsters.npcMonster(pc.chrLevel)
     print(f"Suddenly a {monsterObj.name} appears!")
     current_tile.tile_content = "FIGHT TO THE DEATH"
@@ -161,13 +161,11 @@ def fightLoop(pc, current_tile):
                 break
             else:
                 print("You're not able to run away!")
-                pass
         if monsterObj.hitpoints >0:
             monsterObj.doAttack(pc)
         
     if monsterObj.hitpoints <= 0:
         pc.setExp(monsterObj)
-    pass
 
 
 
