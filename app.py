@@ -1,38 +1,49 @@
 import json
 import random
-from flask import Flask, request
+from flask import Flask, request, render_template, redirect
 import userCharacter
+import gameforms
 import pqMonsters
 import gameTile
 
 
 app = Flask("__name__")
+app.config['SECRET_KEY'] = '7'
+if __name__ == "__main__":
+    app.run()
 
 @app.route("/play", methods=['POST', 'GET'])
 def greet_user():
+    form = gameforms.NameForm()
     if request.method == 'POST':
-        print(request.data)
-    # the code below is executed if the request method
-    # was GET or the credentials were invalid
-    return greet_hero()
+        if form.validate_on_submit():
+            pass
+        return redirect('/newplayer')
+    else:
+        # the code below is executed if the request method
+        # was GET or the credentials were invalid
+        #greet_hero()
+        return render_template('playgame.html', form=form)
 
 @app.route("/newplayer", methods=['POST', 'GET'])
 def new_char():
+    form = gameforms.CharacterForm()
+    player_char = ""
     if request.method == 'POST':
         req_data = json.loads(request.data.decode('utf-8'))
         player_char = userCharacter.playerCharacter(req_data['name'])
     # the code below is executed if the request method
     # was GET or the credentials were invalid
-    return game_intro(player_char)
+    return render_template('charsetup.html', form=form, player_char=player_char)
 
 @app.route("/chooseClass", methods=['POST', 'GET'])
 def set_race_and_class():
     if request.method == 'POST':
         req_data = json.loads(request.data.decode('utf-8'))
         player_char = userCharacter.playerCharacter(req_data['pc'])
-        player_char.setRace()
-        player_char.setClass()
-        player_char.setStats()
+        player_char.set_race()
+        player_char.set_class()
+        player_char.set_stats()
     return char_start(player_char)
     # gameObj = gameHelper.pyquestHelper()
 
