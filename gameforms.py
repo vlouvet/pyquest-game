@@ -12,3 +12,5 @@ class NameForm(FlaskForm):
 
 class TileForm(FlaskForm):
     type = StringField('type', validators=[DataRequired()])
+    tilecontent = StringField('content', validators=[DataRequired()])
+    #TODO: extend tile form to include more details
