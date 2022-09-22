@@ -12,10 +12,10 @@
 
     <h1>PyQuest Game</h1>
     <h2>Character setup</h2>
-    <div>Welcome {{player_char}}, lets get to know you...</div>
+    <div>Welcome {{player_char.username}}, lets get to know you...</div>
 
     {% from "_formhelpers.html" import render_field %} 
-    <form method=post action="/newplayer">
+    <form method=post action="/player/{{player_char.id}}/setup">
         <dl>
             {{render_field(form.name)}}
             {{render_field(form.charclass)}}

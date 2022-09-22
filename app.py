@@ -1,25 +1,37 @@
 import json
 import random
-from flask import Flask, request, render_template, redirect
+from flask import Flask, request, render_template, redirect, url_for
+
+import model
 import userCharacter
 import gameforms
 import pqMonsters
 import gameTile
 
 
+
 def create_app():
+    # create the extension
+    
     app = Flask(__name__)
     app.config["SECRET_KEY"] = "7"
+    # configure the SQLite database, relative to the app instance folder
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///project.db"
+    # initialize the app with the extension
+    model.db.init_app(app)
+    with app.app_context():
+        model.db.create_all()
         
     @app.route("/play", methods=["POST", "GET"])
     def greet_user():
         form = gameforms.NameForm()
         if request.method == "POST":
-            if form.validate_on_submit():
-                pass
-            # TODO: add user record to database
-            print(f"Form username: {form.name.data}")
-            return new_char()
+            #if form.validate_on_submit():
+            new_user = model.User()
+            new_user.username = form.name.data
+            model.db.session.add(new_user)
+            model.db.session.commit()
+            return redirect(url_for("setup_char", id=new_user.id))
         else:
             # the code below is executed if the request method
             # was GET or the credentials were invalid
@@ -27,35 +39,24 @@ def create_app():
             return render_template("playgame.html", form=form)
 
 
-    @app.route("/newplayer", methods=["POST", "GET"])
-    def new_char():
-        form = gameforms.CharacterForm()
-        # TODO: query database to pull the user details
+    @app.route("/player/<int:id>/setup", methods=["POST", "GET"])
+    def setup_char(id):
+        user_profile = model.User.query.get(id)
+        form = gameforms.CharacterForm(obj=user_profile)
         # TODO: pre-populate the form with the data from database
         if request.method == "POST":
-            #req_data = json.loads(request.data.decode("utf-8"))
-            #player_char = userCharacter.playerCharacter(req_data["name"])
-            pass
-        # the code below is executed if the request method
-        # was GET or the credentials were invalid
-        return render_template("charsetup.html", form=form, player_char=username_string)
+            form.populate_obj(user_profile)
+            model.db.session.add(user_profile)
+            model.db.session.commit()
+            print("profile saved")
+            return redirect(url_for("char_start", id=user_profile.id))
+        else:
+            return render_template("charsetup.html", player_char=user_profile, form=form)
 
 
-    @app.route("/chooseClass", methods=["POST", "GET"])
-    def set_race_and_class():
-        player_char = ""
-        if request.method == "POST":
-            req_data = json.loads(request.data.decode("utf-8"))
-            player_char = userCharacter.playerCharacter(req_data["pc"])
-            player_char.set_race()
-            player_char.set_class()
-            player_char.set_stats()
-        return char_start(player_char)
-        # gameObj = gameHelper.pyquestHelper()
-
-
-    @app.route("/charStart", methods=["POST","GET"])
-    def char_start(player_char):
+    @app.route("/player/<int:id>/start", methods=["POST","GET"])
+    def char_start(id):
+        #TODO: query db to get user profile
         char_message = "test message"#player_char.getStats()
         return render_template("charStart.html", charMessage=char_message, next_page="/tile/1")
 
