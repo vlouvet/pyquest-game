@@ -8,4 +8,7 @@ class CharacterForm(FlaskForm):
     race = StringField('race', validators=[DataRequired()])
 
 class NameForm(FlaskForm):
-    name = StringField('name', validators=[DataRequired()])    
+    name = StringField('name', validators=[DataRequired()])
+
+class TileForm(FlaskForm):
+    type = StringField('type', validators=[DataRequired()])

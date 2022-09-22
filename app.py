@@ -46,6 +46,15 @@ def create_app():
         # TODO: pre-populate the form with the data from database
         if request.method == "POST":
             form.populate_obj(user_profile)
+            current_tile = model.Tile()
+            tile_type_list = ["monster", "sign", "scene"]
+            current_tile.type = random.choice(tile_type_list)
+            treasure_found = random.randint(1, 100)
+            if treasure_found == 4:
+                current_tile.type = "treasure"
+            model.db.session.add(current_tile)
+            model.db.session.commit()
+            user_profile.current_tile = current_tile.id
             model.db.session.add(user_profile)
             model.db.session.commit()
             print("profile saved")
@@ -58,22 +67,28 @@ def create_app():
     def char_start(id):
         #TODO: query db to get user profile
         char_message = "test message"#player_char.getStats()
-        return render_template("charStart.html", charMessage=char_message, next_page="/tile/1")
+        return render_template("charStart.html", charMessage=char_message, player_char_id=id)
 
-    def generate_tile():
-        # generate a new tile
-        # tile can contain monster, loot, or quest_info
-        # the first tile in the game is always the same
-        if tile_config.tile_id == 1:
-            tile_config.tile_id = 2
-        else:
+
+    @app.route("/player/<int:id>/game/tile/next", methods=["POST", "GET"])
+    def generate_tile(id):
+        user_profile = model.User.query.get(id)
+        tile_details = model.Tile.query.get(user_profile.current_tile)
+        form = gameforms.TileForm()
+        form.type = tile_details.type
+        if(request.method == 'POST'):
+            current_tile = model.Tile()
             tile_type_list = ["monster", "sign", "scene"]
-            tile_config.tile_content_type = random.choice(tile_type_list)
+            current_tile.type = random.choice(tile_type_list)
             treasure_found = random.randint(1, 100)
             if treasure_found == 4:
-                tile_config.tile_content_type = "treasure"
-            tile_config.tile_id += 1
-        return tile_config
+                current_tile.type = "treasure"
+            model.db.session.add(current_tile)
+            model.db.session.commit()
+            user_profile.current_tile = current_tile.id
+            model.db.session.add(user_profile)
+            model.db.session.commit()
+        return render_template("gameTile.html", player_char=user_profile, form=form)
 
 
     def greet_hero():

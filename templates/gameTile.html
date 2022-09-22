@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>PyQuest Game</title>
+</head>
+<body>
+    <ul id="navigation">
+    {% for item in navigation %}
+        <li><a href="{{ item.href }}">{{ item.caption }}</a></li>
+    {% endfor %}
+    </ul>
+
+    <h1>PyQuest Game</h1>
+    <h2>Tile # {{player_char.current_tile}}</h2>
+    <form action="/player/{{player_char.id}}/game/tile/next" method="post">
+        <div>{{ form.type.label }}: {{ form.type }}</div>
+        <input type="submit" value="Proceed">
+    </form>
+
+</body>
+</html>
