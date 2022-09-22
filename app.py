@@ -17,6 +17,8 @@ def create_app():
         if request.method == "POST":
             if form.validate_on_submit():
                 pass
+            # TODO: add user record to database
+            print(f"Form username: {form.name.data}")
             return new_char()
         else:
             # the code below is executed if the request method
@@ -28,14 +30,15 @@ def create_app():
     @app.route("/newplayer", methods=["POST", "GET"])
     def new_char():
         form = gameforms.CharacterForm()
-        player_char = ""
+        # TODO: query database to pull the user details
+        # TODO: pre-populate the form with the data from database
         if request.method == "POST":
             #req_data = json.loads(request.data.decode("utf-8"))
             #player_char = userCharacter.playerCharacter(req_data["name"])
             pass
         # the code below is executed if the request method
         # was GET or the credentials were invalid
-        return render_template("charsetup.html", form=form, player_char=player_char)
+        return render_template("charsetup.html", form=form, player_char=username_string)
 
 
     @app.route("/chooseClass", methods=["POST", "GET"])
@@ -51,7 +54,7 @@ def create_app():
         # gameObj = gameHelper.pyquestHelper()
 
 
-    @app.route("/characterStart", methods=["POST","GET"])
+    @app.route("/charStart", methods=["POST","GET"])
     def char_start(player_char):
         char_message = "test message"#player_char.getStats()
         return render_template("charStart.html", charMessage=char_message, next_page="/tile/1")
