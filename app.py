@@ -40,6 +40,7 @@ def create_app():
 
     @app.route("/chooseClass", methods=["POST", "GET"])
     def set_race_and_class():
+        player_char = ""
         if request.method == "POST":
             req_data = json.loads(request.data.decode("utf-8"))
             player_char = userCharacter.playerCharacter(req_data["pc"])
@@ -49,6 +50,11 @@ def create_app():
         return char_start(player_char)
         # gameObj = gameHelper.pyquestHelper()
 
+
+    @app.route("/characterStart", methods=["POST","GET"])
+    def char_start(player_char):
+        char_message = "test message"#player_char.getStats()
+        return render_template("charStart.html", charMessage=char_message, next_page="/tile/1")
 
     def generate_tile():
         # generate a new tile
@@ -87,9 +93,7 @@ def create_app():
         return {"intro_message": intro_message, "next_page": "set_raceNclass"}
 
 
-    def char_start(player_char):
-        char_message = player_char.getStats()
-        return {"charMessage": char_message, "next_page": "/tile/1"}
+
 
 
     def game_loop(player_char, game_obj):
