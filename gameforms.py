@@ -1,16 +1,16 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField
+from wtforms import StringField, SelectField
 from wtforms.validators import DataRequired
 
 class CharacterForm(FlaskForm):
-    name = StringField('name', validators=[DataRequired()])
-    charclass = StringField('class', validators=[DataRequired()])
-    race = StringField('race', validators=[DataRequired()])
+    name = StringField('Character Name', validators=[DataRequired()])
+    charclass = SelectField(u'Character Class', coerce=int, validators=[DataRequired()])
+    charrace = SelectField(u'Character Race', coerce=int, validators=[DataRequired()])
 
-class NameForm(FlaskForm):
-    name = StringField('name', validators=[DataRequired()])
+class UserNameForm(FlaskForm):
+    username = StringField('User Email Address:', validators=[DataRequired()])
 
 class TileForm(FlaskForm):
-    type = StringField('type', validators=[DataRequired()])
-    tilecontent = StringField('content', validators=[DataRequired()])
-    #TODO: extend tile form to include more details
+    type = SelectField(u'Tile Type', coerce=int)
+    tilecontent = StringField('content')
+    tileaction = SelectField(u'Tile Action', coerce=int, validators=[DataRequired()])

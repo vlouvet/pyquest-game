@@ -1,21 +1,28 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <title>PyQuest Game</title>
 </head>
+
 <body>
     <ul id="navigation">
-    {% for item in navigation %}
+        {% for item in navigation %}
         <li><a href="{{ item.href }}">{{ item.caption }}</a></li>
-    {% endfor %}
+        {% endfor %}
     </ul>
 
     <h1>PyQuest Game</h1>
     <h2>Welcome Traveler</h2>
-    <form action="/play" method="post">
-        <div>{{ form.name.label }}: {{ form.name }}</div>
+    <div>Start playing the game by clicking the button below.<br />
+        An Email address is required in order to save
+        progress.</div>
+    <form action="/" method="post">
+        {{ form.csrf_token }}
+        <div>{{ form.username.label }}: {{ form.username }}</div>
         <input type="submit" value="Play">
     </form>
 
 </body>
+
 </html>

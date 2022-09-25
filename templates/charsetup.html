@@ -16,10 +16,11 @@
 
     {% from "_formhelpers.html" import render_field %} 
     <form method=post action="/player/{{player_char.id}}/setup">
+        {{ form.csrf_token }}
         <dl>
             {{render_field(form.name)}}
             {{render_field(form.charclass)}}
-            {{render_field(form.race)}}
+            {{render_field(form.charrace)}}
         </dl>
         <p><input type=submit value="Setup"></p>
         {% if error %}

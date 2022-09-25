@@ -9,28 +9,33 @@ import pqMonsters
 import gameTile
 
 
-
 def create_app():
     # create the extension
-    
+
     app = Flask(__name__)
     app.config["SECRET_KEY"] = "7"
     # configure the SQLite database, relative to the app instance folder
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///project.db"
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///pyquest_game.db"
     # initialize the app with the extension
     model.db.init_app(app)
     with app.app_context():
         model.db.create_all()
-        
-    @app.route("/play", methods=["POST", "GET"])
+        model.init_defaults()
+
+    @app.route("/", methods=["POST", "GET"])
     def greet_user():
-        form = gameforms.NameForm()
+        form = gameforms.UserNameForm()
         if request.method == "POST":
-            #if form.validate_on_submit():
-            new_user = model.User()
-            new_user.username = form.name.data
-            model.db.session.add(new_user)
-            model.db.session.commit()
+            if form.validate_on_submit():
+                new_user = model.User()
+                new_user.username = form.username.data
+                # TODO: confirm that this user doesn't already exist in the database
+                # (deduplicate on email)
+                model.db.session.add(new_user)
+                model.db.session.commit()
+            else:
+                print("Form did not validate!")
+                print(form.errors)
             return redirect(url_for("setup_char", id=new_user.id))
         else:
             # the code below is executed if the request method
@@ -38,82 +43,126 @@ def create_app():
             # greet_hero()
             return render_template("playgame.html", form=form)
 
-
     @app.route("/player/<int:id>/setup", methods=["POST", "GET"])
     def setup_char(id):
         user_profile = model.User.query.get(id)
         form = gameforms.CharacterForm(obj=user_profile)
+        form.charclass.choices = [
+                (PlayerClass.id, PlayerClass.name)
+                for PlayerClass in model.PlayerClass.query.order_by("name")
+            ]
+        form.charrace.choices = [
+                (PlayerRace.id, PlayerRace.name)
+                for PlayerRace in model.PlayerRace.query.order_by("name")
+            ]    
         # TODO: pre-populate the form with the data from database
         if request.method == "POST":
             form.populate_obj(user_profile)
+            # TODO: move this code into a tile_init() function
             current_tile = model.Tile()
             tile_type_list = ["monster", "sign", "scene"]
+            form = gameforms.TileForm()
+            form.type.choices = [
+                (tile_type.id, tile_type.name)
+                for tile_type in model.TileTypeOption.query.order_by("name")
+            ]
             current_tile.type = random.choice(tile_type_list)
             treasure_found = random.randint(1, 100)
             if treasure_found == 4:
                 current_tile.type = "treasure"
             model.db.session.add(current_tile)
             model.db.session.commit()
+            # End tile_init() code
             user_profile.current_tile = current_tile.id
             model.db.session.add(user_profile)
             model.db.session.commit()
             print("profile saved")
             return redirect(url_for("char_start", id=user_profile.id))
-        else:
-            return render_template("charsetup.html", player_char=user_profile, form=form)
+        elif request.method == "GET":
+            return render_template(
+                "charsetup.html", player_char=user_profile, form=form
+            )
 
-
-    @app.route("/player/<int:id>/start", methods=["POST","GET"])
+    @app.route("/player/<int:id>/start", methods=["POST", "GET"])
     def char_start(id):
-        #TODO: query db to get user profile
-        char_message = "test message"#player_char.getStats()
-        return render_template("charStart.html", charMessage=char_message, player_char_id=id)
-
+        # TODO: query db to get user profile
+        char_message = "This is a test message to be displayed when the player first starts the game"
+        # player_char.getStats()
+        return render_template(
+            "charStart.html", charMessage=char_message, player_char_id=id)
 
     @app.route("/player/<int:id>/game/tile/next", methods=["POST", "GET"])
     def generate_tile(id):
         user_profile = model.User.query.get(id)
         tile_details = model.Tile.query.get(user_profile.current_tile)
-        form = gameforms.TileForm()
-        form.type = tile_details.type
-        if(request.method == 'POST'):
+        # TODO: handle tile_details being null/empty
+        form = gameforms.TileForm(obj=tile_details)
+        form.type.choices = [
+            (tile_type.id, tile_type.name)
+            for tile_type in model.TileTypeOption.query.order_by("name")
+        ]
+        form.tileaction.choices = [
+            (tileaction.id, tileaction.name)
+            for tileaction in model.ActionOption.query.order_by("name")
+        ]
+        # if the request was a POST, generate a new tile then display it using gameTile.html
+        if request.method == "POST":
+            # start tile_init() code
             current_tile = model.Tile()
-            tile_type_list = ["monster", "sign", "scene"]
+            tile_type_list = ["monster", "sign", "scene", "treausre"]
             current_tile.type = random.choice(tile_type_list)
-            treasure_found = random.randint(1, 100)
-            if treasure_found == 4:
-                current_tile.type = "treasure"
             model.db.session.add(current_tile)
             model.db.session.commit()
             user_profile.current_tile = current_tile.id
             model.db.session.add(user_profile)
             model.db.session.commit()
+            # end tile_init() code
         return render_template("gameTile.html", player_char=user_profile, form=form)
 
+    @app.route(
+        "/player/<int:playerid>/game/tile/<int:tileid>/action/<int:actionid>",
+        methods=["POST", "GET"],
+    )
+    def execute_tile_action(playerid, tileid, actionID):
+        tileForm = gameforms.TileForm()
+        if request.method == "POST":
+            # validate actionID, return error message if not valid
+            if actionID not in [1, 2, 3, 4]:
+                return {"Error": "Bad action selected"}
+            tile_record = model.Tile.query.get(id=tileid)
+            # validate that tile is still 'action-able', meaning it hasn't been 'actioned' yet.
+            if not tile_record.action.valid == True:
+                return {"Error": "tile has already been actioned"}
+            # handle rest
+            if actionID == 1:  # if requested action is to rest..
+                if tileForm.tilecontent not in [
+                    3
+                ]:  # if the current tile doesn't have a monster
+                    tile_record.action = 1
+                    player_record = model.Player.query.get(id=playerid)
+                    player_record.hitpoints += 10
+                    model.db.session.add(tile_record)
+                    model.db.session.add(player_record)
+                    model.db.session.commit()
+                    # TODO: return JSON blob to be parsed by tile route
+            # handle inspect for items/treasure
+            # handle fight monster
+            if actionID == 3:  # if requested action is to rest..
+                if tileForm.tilecontent == 3:  # if the current tile has a monster
+                    tile_record.action = 3  # save the action to the tile
+                    player_record = model.Player.query.get(
+                        id=playerid
+                    )  # get the player from the db
+                    # TODO: handle actual fight logic here
+                    model.db.session.add(tile_record)  # add the tile to the session
+                    model.db.session.add(
+                        player_record
+                    )  # add the player record to the session
+                    model.db.session.commit()  # save the results to the db
+                    # TODO: return JSON blob to be parsed by tile route
+            # handle flee from tile
 
-    def greet_hero():
-        greet_message = "Hello Weary traveler, I think I've seen you before.\n"
-        greet_message += "What was your name again?"
-        # while pc.name == "" or pc.name == "player1":
-        #     pc.setName()
-        return {"greet_message": greet_message}
-
-
-    def move_penalty(player_char):
-        player_char.hitpoints = player_char.hitpoints - 1
-
-
-    def game_intro(player_char):
-        intro_message = "Welcome to Pyquest!"
-        intro_message += "the story begins on a cold dark night..."
-        intro_message += f"our hero, {player_char.name}, goes out looking for adventure..."
-        intro_message += "when suddenly!"
-
-        return {"intro_message": intro_message, "next_page": "set_raceNclass"}
-
-
-
-
+            pass
 
     def game_loop(player_char, game_obj):
         player_char.setStats()
@@ -160,7 +209,6 @@ def create_app():
         player_char.setDead(current_tile)
         game_obj.createHighScore(current_tile, player_char)
 
-
     def fight_loop(player_char, current_tile, game_obj):
         monster_obj = pqMonsters.NPCMonster()
         print(f"Suddenly a {monster_obj.name} appears!")
@@ -190,7 +238,7 @@ def create_app():
 
         if monster_obj.hitpoints <= 0:
             player_char.setExp(monster_obj)
-            
+
     if __name__ == "__main__":
         with open("game_config.ini", "r") as fin:
             config_json = json.load(fin)
@@ -198,4 +246,3 @@ def create_app():
         app.run()
 
     return app
-
