@@ -14,6 +14,7 @@
     <h2>Tile # {{player_char.current_tile}}</h2>
     <form action="/player/{{player_char.id}}/game/tile/next" method="post">
         <div>{{ form.type.label }}: {{ form.type }}</div>
+        <div>{{ form.formcontent.label }}: {{ form.type }}</div>
         <input type="submit" value="Proceed">
     </form>
 
