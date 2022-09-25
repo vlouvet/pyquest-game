@@ -13,15 +13,17 @@ class User(db.Model):
 class Tile(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     type = db.Column(db.Integer, db.ForeignKey('tiletypeoption.id'))
-    action = db.relationship("Action")
+    action = db.Column(db.Integer, db.ForeignKey('action.id'))
     valid = db.Column(db.Boolean)
 
 class Action(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
     tile = db.Column(db.Integer, db.ForeignKey('tile.id'))
+    actionverb = db.Column(db.Integer, db.ForeignKey('actionoption.id'))
 
 class ActionOption(db.Model):
+    __tablename__ = "actionoption"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
 

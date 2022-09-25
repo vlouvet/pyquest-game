@@ -15,7 +15,7 @@
     <div>Now it is time to start your quest</div>
     <div>Custom Message: {{charMessage}}</div>
     {% from "_formhelpers.html" import render_field %} 
-    <form method=post action="/player/{{player_char_id}}/game/tile/next">
+    <form method=get action="/player/{{player_char_id}}/game/tile/next">
         <p><input type=submit value="First tile"></p>
         {% if error %}
         <p class="error"><strong>Error:</strong>{{ error}}</p>

@@ -17,7 +17,8 @@
         <div>{{ form.type.label }}: {{ form.type }}</div>
         <div>{{ form.tilecontent.label }}: {{ form.tilecontent }}</div>
         <div>{{ form.tileaction.label }}: {{ form.tileaction }}</div>
-        <input type="submit" value="Proceed">
+        <button formaction="/player/{{player_char.id}}/game/tile/1/action/1">Take Action</button>
+        <input type="submit" value="Proceed to Next Tile">
     </form>
 
 </body>
