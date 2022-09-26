@@ -93,6 +93,7 @@ def create_app():
         tile_details = model.Tile.query.get(user_profile.current_tile)
         # TODO: handle tile_details being null/empty
         form = gameforms.TileForm(obj=tile_details)
+        form.tileid = tile_details.id
         tile_type_list = [
             (tile_type.name)
             for tile_type in model.TileTypeOption.query.order_by("name")
@@ -113,17 +114,15 @@ def create_app():
             model.db.session.commit()
             if form.tileaction.data:
                 current_tile.action = form.tileaction.data
-                # TODO: create a new action record
+                # create a new action record
                 currentAction = model.Action()
-                # TODO: assign action record to tile
+                # assign action record to tile
                 currentAction.tile = current_tile.id
-                # TODO: assign action record details
+                # assign action record details
                 currentAction.name = current_tile.action
-                # TODO: add and commit action record to db
+                # add and commit action record to db
                 model.db.session.add(currentAction)
                 model.db.session.commit()
-                print(f"action ID:{currentAction.id}")
-                print(f"action tile id: {currentAction.tile}")
             user_profile.current_tile = current_tile.id
             model.db.session.add(user_profile)
             model.db.session.commit()
@@ -137,15 +136,15 @@ def create_app():
     def execute_tile_action(playerid, tileid, actionID):
         tile_record = model.Tile.query.get(tileid)
         tileForm = gameforms.TileForm(obj=tile_record)
-        print(f"Tile's action ID: {tile_record.action}")
+        print(f"Tile record's ID: {tile_record.id}")
         if request.method == "POST":
             # validate actionID, return error message if not valid
             if actionID not in [1, 2, 3, 4]:
                 return {"Error": "Bad action selected"}
-            action_record = model.Action.query.filter_by(id=tileid).first()
+            action_record = model.Action.query.filter_by(id=actionID).first()
             # validate that tile is still 'action-able', meaning it hasn't been 'actioned' yet.
             print(f"Action_record ID: {action_record.id}")
-            if not action_record.valid == True:
+            if not tile_record.valid == True:
                 return {"Error": "tile has already been actioned"}
             # handle rest
             if actionID == 1:  # if requested action is to rest..
