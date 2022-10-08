@@ -11,6 +11,7 @@ class UserNameForm(FlaskForm):
     username = StringField('User Email Address:', validators=[DataRequired()])
 
 class TileForm(FlaskForm):
+    tileid = StringField(u'Tile ID', render_kw={'readonly':True})
     type = StringField(u'Tile Type', render_kw={'readonly':True})
     tilecontent = TextAreaField(u'content', render_kw={'readonly':True})
     tileaction = SelectField(u'Tile Action', coerce=int, validators=[DataRequired()])
