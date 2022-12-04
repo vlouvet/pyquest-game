@@ -1,6 +1,6 @@
 import json
 import random
-from flask import Flask, request, render_template, redirect, url_for
+from flask import Flask, request, render_template, redirect, url_for, flash
 
 import model
 import userCharacter
@@ -31,8 +31,14 @@ def create_app():
                 new_user.username = form.username.data
                 # TODO: confirm that this user doesn't already exist in the database
                 # (deduplicate on email)
-                model.db.session.add(new_user)
-                model.db.session.commit()
+                user_exists = False
+                if(not model.user_exists(new_user.username)):
+                    model.db.session.add(new_user)
+                    model.db.session.commit()
+                
+                else:
+                    flash("That user is already taken!")
+                    return render_template("playgame.html", form=form)                 
             else:
                 print("Form did not validate!")
                 print(form.errors)
@@ -177,6 +183,10 @@ def create_app():
 
             pass
 
+
+    @app.route("/player/<int:id>/profile", methods=["GET"])
+    def get_user_profile(id):
+        pass
     # def game_loop(player_char, game_obj):
     #     player_char.setStats()
     #     current_tile = generate_tile()

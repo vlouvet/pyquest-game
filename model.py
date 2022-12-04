@@ -87,3 +87,10 @@ def init_defaults():
             current_tile_type = PlayerRace(name=tile_type["name"])
             db.session.add(current_tile_type)
         db.session.commit()
+
+def user_exists(username):
+    user = User.query.filter_by(username=username).first()
+    if user:
+        return True
+    else:
+        return False
