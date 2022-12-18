@@ -64,17 +64,19 @@ def create_app():
         # TODO: pre-populate the form with the data from database
         if request.method == "POST":
             form.populate_obj(user_profile)
-            # TODO: move this code into a tile_init() function
-            current_tile = model.Tile()
-            tile_type_list = [
-                (tile_type.name)
-                for tile_type in model.TileTypeOption.query.order_by("name")
-            ]
-            form = gameforms.TileForm()
-            form.type.data = random.choice(tile_type_list)
-            model.db.session.add(current_tile)
-            model.db.session.commit()
-            # End tile_init() code
+            current_tile = user_profile.current_tile
+            if(not current_tile):
+                # TODO: move this code into a tile_init() function
+                current_tile = model.Tile()
+                tile_type_list = [
+                    (tile_type.name)
+                    for tile_type in model.TileTypeOption.query.order_by("name")
+                ]
+                form = gameforms.TileForm()
+                form.type.data = random.choice(tile_type_list)
+                model.db.session.add(current_tile)
+                model.db.session.commit()
+                # End tile_init() code
             user_profile.current_tile = current_tile.id
             model.db.session.add(user_profile)
             model.db.session.commit()
@@ -97,8 +99,10 @@ def create_app():
     def generate_tile(id):
         user_profile = model.User.query.get(id)
         tile_details = model.Tile.query.get(user_profile.current_tile)
-        # TODO: handle tile_details being null/empty
-        form = gameforms.TileForm(obj=tile_details)
+        if tile_details:
+            form = gameforms.TileForm(obj=tile_details)
+        else:
+            print("Tile details empty")
         form.tileid = tile_details.id
         tile_type_list = [
             (tile_type.name)
@@ -129,6 +133,8 @@ def create_app():
                 # add and commit action record to db
                 model.db.session.add(currentAction)
                 model.db.session.commit()
+            else:
+                print("current tile has no action data!")
             user_profile.current_tile = current_tile.id
             model.db.session.add(user_profile)
             model.db.session.commit()
@@ -136,24 +142,24 @@ def create_app():
         return render_template("gameTile.html", player_char=user_profile, form=form)
 
     @app.route(
-        "/player/<int:playerid>/game/tile/<int:tileid>/action/<int:actionID>",
+        "/player/<int:playerid>/game/tile/<int:tileid>/action/<int:action_type_ID>",
         methods=["POST", "GET"],
     )
-    def execute_tile_action(playerid, tileid, actionID):
+    def execute_tile_action(playerid, tileid, action_type_ID):
         tile_record = model.Tile.query.get(tileid)
         tileForm = gameforms.TileForm(obj=tile_record)
         print(f"Tile record's ID: {tile_record.id}")
         if request.method == "POST":
             # validate actionID, return error message if not valid
-            if actionID not in [1, 2, 3, 4]:
+            if action_type_ID not in [1, 2, 3, 4]:
                 return {"Error": "Bad action selected"}
-            action_record = model.Action.query.filter_by(id=actionID).first()
+            action_record = model.Action.query.filter_by(tile=tileid, actionverb=action_type_ID).first()
             # validate that tile is still 'action-able', meaning it hasn't been 'actioned' yet.
             print(f"Action_record ID: {action_record.id}")
             if not tile_record.valid == True:
                 return {"Error": "tile has already been actioned"}
             # handle rest
-            if actionID == 1:  # if requested action is to rest..
+            if action_type_ID == 1:  # if requested action is to rest..
                 if tileForm.tilecontent not in [
                     3
                 ]:  # if the current tile doesn't have a monster
@@ -166,7 +172,7 @@ def create_app():
                     # TODO: return JSON blob to be parsed by tile route
             # handle inspect for items/treasure
             # handle fight monster
-            if actionID == 3:  # if requested action is to rest..
+            if action_type_ID == 3:  # if requested action is to rest..
                 if tileForm.tilecontent == 3:  # if the current tile has a monster
                     tile_record.action = 3  # save the action to the tile
                     player_record = model.Player.query.get(
