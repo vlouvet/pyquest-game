@@ -95,10 +95,12 @@ def create_app():
         return render_template(
             "charStart.html", charMessage=char_message, player_char_id=id)
 
-    @app.route("/player/<int:id>/game/tile/next", methods=["POST", "GET"])
-    def generate_tile(id):
-        user_profile = model.User.query.get(id)
+    @app.route("/player/<int:player_id>/game/tile/next", methods=["POST", "GET"])
+    def generate_tile(player_id):
+        user_profile = model.User.query.get(player_id)
+        # user_profile = model.db.session.execute(model.db.select(model.User).filter_by(id=player_id)).one()
         tile_details = model.Tile.query.get(user_profile.current_tile)
+        # tile_details = model.db.session.execute(model.db.select(model.Tile).filter_by(id=user_profile.current_tile, user_id=user_profile.id)).one()
         if tile_details:
             form = gameforms.TileForm(obj=tile_details)
         else:
@@ -120,8 +122,6 @@ def create_app():
             current_tile = model.Tile()
             current_tile.type = random.choice(tile_type_list)
             print(f"tileaction: {form.tileaction.data}")
-            model.db.session.add(current_tile)
-            model.db.session.commit()
             if form.tileaction.data:
                 current_tile.action = form.tileaction.data
                 # create a new action record
@@ -136,26 +136,28 @@ def create_app():
             else:
                 print("current tile has no action data!")
             user_profile.current_tile = current_tile.id
+            model.db.session.add(current_tile)
+            model.db.session.commit()
             model.db.session.add(user_profile)
             model.db.session.commit()
             # end tile_init() code
         return render_template("gameTile.html", player_char=user_profile, form=form)
 
     @app.route(
-        "/player/<int:playerid>/game/tile/<int:tileid>/action/<int:action_type_ID>",
+        "/player/<int:playerid>/game/tile/<int:tileid>/action",
         methods=["POST", "GET"],
     )
-    def execute_tile_action(playerid, tileid, action_type_ID):
+    def execute_tile_action(playerid, tileid):
         tile_record = model.Tile.query.get(tileid)
         tileForm = gameforms.TileForm(obj=tile_record)
-        print(f"Tile record's ID: {tile_record.id}")
+        action_type_ID = tileForm.data.get('tileaction')
         if request.method == "POST":
             # validate actionID, return error message if not valid
             if action_type_ID not in [1, 2, 3, 4]:
                 return {"Error": "Bad action selected"}
             action_record = model.Action.query.filter_by(tile=tileid, actionverb=action_type_ID).first()
-            # validate that tile is still 'action-able', meaning it hasn't been 'actioned' yet.
-            print(f"Action_record ID: {action_record.id}")
+            if action_record:
+                print(f"Action_record ID: {action_record.id}")
             if not tile_record.valid == True:
                 return {"Error": "tile has already been actioned"}
             # handle rest
@@ -166,29 +168,24 @@ def create_app():
                     tile_record.action = 1
                     player_record = model.Player.query.get(id=playerid)
                     player_record.hitpoints += 10
-                    model.db.session.add(tile_record)
-                    model.db.session.add(player_record)
-                    model.db.session.commit()
                     # TODO: return JSON blob to be parsed by tile route
             # handle inspect for items/treasure
             # handle fight monster
             if action_type_ID == 3:  # if requested action is to rest..
                 if tileForm.tilecontent == 3:  # if the current tile has a monster
                     tile_record.action = 3  # save the action to the tile
-                    player_record = model.Player.query.get(
-                        id=playerid
-                    )  # get the player from the db
-                    # TODO: handle actual fight logic here
-                    model.db.session.add(tile_record)  # add the tile to the session
-                    model.db.session.add(
-                        player_record
-                    )  # add the player record to the session
-                    model.db.session.commit()  # save the results to the db
-                    # TODO: return JSON blob to be parsed by tile route
+            player_record = model.User.query.get(playerid
+            )  # get the player from the db
+            # TODO: handle actual fight logic here
+            tile_record.user_id = player_record.id
+            tile_record.valid = False
+            model.db.session.add(tile_record)
+            model.db.session.add(player_record)
+            model.db.session.commit()
             # handle flee from tile
-
-            pass
-
+            return {'status_code':200, 'data':'success'}
+        else:
+            return {'status_code':200, 'data': {'tile_action':tile_record.action, 'valid':tile_record.valid, 'user_id':tile_record.user_id}}
 
     @app.route("/player/<int:id>/profile", methods=["GET"])
     def get_user_profile(id):

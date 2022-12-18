@@ -9,6 +9,7 @@ class User(db.Model):
     email = db.Column(db.String)
     current_tile = db.Column(db.String, nullable=True)
     hitpoints = db.column(db.Integer)
+    tiles = db.relationship('Tile', backref='user')
     playerclass = db.Column(db.Integer, db.ForeignKey("playerclass.id"))
     playerrace = db.Column(db.Integer, db.ForeignKey("playerrace.id"))
 
@@ -17,7 +18,8 @@ class Tile(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     type = db.Column(db.Integer, db.ForeignKey("tiletypeoption.id"))
     action = db.Column(db.Integer, db.ForeignKey("action.id"))
-    valid = db.Column(db.Boolean)
+    valid = db.Column(db.Boolean, default=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
 
 
 class Action(db.Model):
