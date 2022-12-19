@@ -11,7 +11,7 @@
     </ul>
 
     <h1>PyQuest Game</h1>
-    <h2>Tile # {{player_char.current_tile}}</h2>
+    <h2>Tile # {{form.tileid}}</h2>
     <form action="/player/{{player_char.id}}/game/tile/next" method="post">
         {{ form.csrf_token }}
         <div>{{ form.type.label }}: {{ form.type }}</div>
