@@ -4,10 +4,45 @@ import userCharacter
 import pqMonsters
 import gameTile
 import random
-from flask import Flask, request, jsonify
+from flask import Flask, request
+from flask_sqlalchemy import SQLAlchemy
+
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test.db'
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+db = SQLAlchemy(app)
+db.create_all()
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+
+    def __repr__(self):
+        return '<User %r>' % self.username
+
+
+# class User(db.Model):
+#     id = db.Column(db.Integer, primary_key=True)
+#     email = db.Column(db.String(120), unique=True)
+#     name = db.Column(db.String(80), unique=True, nullable=False)
+#     race = db.Column(db.String(80), unique=True)
+#     chrClass = db.Column(db.String(80), unique=True)
+#     strength = db.Column(db.Integer)
+#     intelligence = db.Column(db.Integer)
+#     hitpoints = db.Column(db.Integer)
+#     maxhp = db.Column(db.Integer)
+#     expPoints = db.Column(db.Integer)
+#     maxExp = db.Column(db.Integer)
+#     stealth = db.Column(db.Integer)
+#     chrLevel = db.Column(db.Integer)
+#     nextLevelExp = db.Column(db.Integer)
+
+
+#     def __repr__(self):
+#         return '<User %r>' % self.name
 
 app = Flask("__name__")
-
+db.create_all()
 @app.route("/play", methods=['POST', 'GET'])
 def greet_user():
     error = None
@@ -22,12 +57,17 @@ def new_char():
     error = None
     if request.method == 'POST':
         req_data = json.loads(request.data.decode('utf-8'))
-        pc = userCharacter.playerCharacter(req_data['name'])
+        newChar = User(name=req_data['pc']['name'])
+        db.session.add(newChar)
+        exit()
+        db.session.commit()
+        print(f"User ID: {newChar.id}")
+        pc = userCharacter.playerCharacter(req_data['pc']['name'])
     # the code below is executed if the request method
     # was GET or the credentials were invalid
     return gameIntro(pc)
 
-@app.route("/chooseClass", methods=['POST', 'GET'])
+@app.route("/chooseRaceClass", methods=['POST', 'GET'])
 def set_raceNclass():
     error = None
     if request.method == 'POST':
