@@ -15,7 +15,7 @@ class playerCharacter:
         self.chrLevel = 1
         self.nextLevelExp = self.chrLevel * 100
 
-    def setName(self):
+    def set_name(self):
         userInput = input("Please enter your character's name:")
         if userInput != "exit":
             self.name = userInput
@@ -23,29 +23,25 @@ class playerCharacter:
             print("Exit requested")
             exit()
 
-    def setClass(self, request_data):
-        # userInput = input("what is your class?\n[wiz,pldn,warr]\n")
-        # if userInput == "exit":
-        #     exit()
-        # elif userInput not in ["wiz", "pldn", "warr"]:
-        #     print("that is not a valid class, Try again!")
-        #     self.getClass()
-        # else:
-        #     self.chrClass = userInput
-        self.chrClass = request_data['pc']['chrClass']
-        return self.chrClass
+    def set_class(self):
+        userInput = input("what is your class?\n[wiz,pldn,warr]\n")
+        if userInput == "exit":
+            exit()
+        elif userInput not in ["wiz", "pldn", "warr"]:
+            print("that is not a valid class, Try again!")
+            self.set_class()
+        else:
+            self.chrClass = userInput
 
-    def setRace(self, request_data):
-        # userInput = input("what is your race?\n[elf,hbt,kjt]\n")
-        # if userInput not in ["elf", "hbt", "kjt"]:
-        #     print("that is not a valid class, Try again!")
-        #     self.getRace()
-        # else:
-        print(type(request_data))
-        self.race = request_data['pc']['race']
-        return self.race
+    def set_race(self):
+        userInput = input("what is your race?\n[elf,hbt,kjt]\n")
+        if userInput not in ["elf", "hbt", "kjt"]:
+            print("that is not a valid class, Try again!")
+            self.set_race()
+        else:
+            self.race = userInput
 
-    def setStats(self):
+    def set_stats(self):
         # start by setting all stats to default values
         self.strength = 10
         self.intelligence = 10
@@ -90,17 +86,17 @@ class playerCharacter:
             self.maxhp = self.maxhp * 1.5
         self.hitpoints = self.maxhp
 
-    def setDead(self, tileObj):
+    def set_dead(self, tileObj):
         print(f"Congrats! you died after {tileObj.tile_id} tiles.")
-        print(f"Better luck next time!")
+        print("Better luck next time!")
 
-    def setExp(self, monsterObj):
+    def set_exp(self, monsterObj):
         if monsterObj.level == 1:
             self.expPoints += 10
         elif monsterObj.level >= 2 and monsterObj.level <= 10:
             self.expPoints += 5
 
-    def getStats(self):
+    def get_stats(self):
         print(f"Race: {self.race}")
         print(f"Class: {self.chrClass}")
         print(f"Intelligence: {self.intelligence}")
@@ -112,7 +108,7 @@ class playerCharacter:
         json_output = {'name': self.name, 'race': self.race, 'class':self.chrClass}
         return json_output
 
-    def doAttack(self, monsterObj):
+    def do_attack(self, monsterObj):
         attackDamage = random.randint(1, self.chrLevel)
         #strength modifier add 1/10th of character's strength rating to attackDamage
         attackDamage += self.strength/10 
@@ -127,7 +123,7 @@ class playerCharacter:
         monsterObj.hitpoints = monsterObj.hitpoints - attackDamage
         print(f"{monsterObj.name}'s Hitpoints: {monsterObj.hitpoints}")
 
-    def doMagic(self, monsterObj):
+    def do_magic(self, monsterObj):
         spellname = input("Select Spell: fireball, 'lightning bolt', 'ice shard', heal")
         if spellname in ['fireball', 'lightning bolt', 'ice shard']:
             magicDamage = random.randint(1, self.chrLevel)
@@ -149,14 +145,14 @@ class playerCharacter:
             else:
                 self.hitpoints += 10
 
-    def doFlee(self, monsterObj):
+    def do_flee(self, monsterObj):
         if monsterObj.level > self.chrLevel:
             return False
         else:
             print("you swiftly run away")
             return True
 
-    def doLevelUp(self):
+    def do_levelup(self):
         self.strength = int(self.strength * 1.5)
         self.intelligence = int(self.intelligence * 1.5)
         self.stealth = int(self.stealth * 1.5)
@@ -166,7 +162,7 @@ class playerCharacter:
         self.nextLevelExp = self.chrLevel * 100
         print("Level up! stats upgraded")
 
-    def doRestHP(self):
+    def do_rest_hp(self):
         if self.hitpoints < self.maxhp:
             if self.hitpoints + 10 > self.maxhp:
                 self.hitpoints = self.maxhp

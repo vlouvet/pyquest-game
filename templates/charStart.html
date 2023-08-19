@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>PyQuest Game</title>
+</head>
+<body>
+    <ul id="navigation">
+    {% for item in navigation %}
+        <li><a href="{{ item.href }}">{{ item.caption }}</a></li>
+    {% endfor %}
+    </ul>
+
+    <h1>PyQuest Game</h1>
+    <h2>Character start page</h2>
+    <div>Now it is time to start your quest</div>
+    <div>Custom Message: {{charMessage}}</div>
+    {% from "_formhelpers.html" import render_field %} 
+    <form method=get action="/player/{{player_char_id}}/game/tile/next">
+        <p><input type=submit value="First tile"></p>
+        {% if error %}
+        <p class="error"><strong>Error:</strong>{{ error}}</p>
+        {% endif %}
+    </form>
+</body>
+</html>

@@ -1,337 +1,183 @@
 import json
-import gameHelper
+import random
+from flask import Flask, request, render_template, redirect, url_for, flash
+
+import model
 import userCharacter
+import gameforms
 import pqMonsters
 import gameTile
-import random
-from flask import Flask, request
-from flask_sqlalchemy import SQLAlchemy
-
-app = Flask(__name__)
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///test.db"
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = True
-db = SQLAlchemy(app)
 
 
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(120), unique=True)
-    name = db.Column(db.String(80), unique=True, nullable=False)
-    race = db.Column(db.String(80))
-    chrClass = db.Column(db.String(80))
-    strength = db.Column(db.Integer)
-    intelligence = db.Column(db.Integer)
-    hitpoints = db.Column(db.Integer)
-    maxhp = db.Column(db.Integer)
-    expPoints = db.Column(db.Integer)
-    maxExp = db.Column(db.Integer)
-    stealth = db.Column(db.Integer)
-    chrLevel = db.Column(db.Integer)
-    nextLevelExp = db.Column(db.Integer)
-    tiles = db.relationship("Tile", backref="user", lazy=True, uselist=False)
+def create_app():
+    # create the extension
 
-    def __repr__(self):
-        return "<User %r>" % self.name
+    app = Flask(__name__)
+    app.config["SECRET_KEY"] = "7"
+    # configure the SQLite database, relative to the app instance folder
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///pyquest_game.db"
+    # initialize the app with the extension
+    model.db.init_app(app)
+    with app.app_context():
+        model.db.create_all()
+        model.init_defaults()
 
-
-class Tile(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    content_type = db.Column(db.String(255))
-    content = db.Column(db.String(255))
-    userId = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    monsterId = db.Column(db.Integer, db.ForeignKey("monster.id"))
-    nextTile = db.Column(db.String(255))
-
-
-class Monster(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(255))
-    race = db.Column(db.String(255))
-    strength = db.Column(db.Integer)
-    intelligence = db.Column(db.Integer)
-    hitpoints = db.Column(db.Integer)
-    stealth = db.Column(db.Integer)
-    level = db.Column(db.Integer)
-    tiles = db.relationship("Tile", backref="monster", lazy=True, uselist=False)
-
-
-db.create_all()
-
-
-@app.route("/play", methods=["GET", "POST"])
-def greet_user():
-    error = None
-    if request.method == "POST":
-        print(request.data)
-    # the code below is executed if the request method
-    # was GET or the credentials were invalid
-    return greetHero()
-
-
-@app.route("/newplayer", methods=["GET", "POST"])
-def new_char():
-    error = None
-    if request.method == "POST":
-        req_data = json.loads(request.data.decode("utf-8"))
-        newChar = User(
-            name=req_data["pc"]["name"],
-            strength=10,
-            intelligence=10,
-            hitpoints=100,
-            maxhp=100,
-            expPoints=1,
-            maxExp=100,
-            stealth=10,
-            chrLevel=1,
-            nextLevelExp=100,
-        )
-        db.session.add(newChar)
-        db.session.commit()
-        print(f"User ID: {newChar.id}")
-        pc = userCharacter.playerCharacter(newChar.name)
-    # the code below is executed if the request method
-    # was GET or the credentials were invalid
-    return gameIntro(pc)
-
-
-@app.route("/chooseClass", methods=["GET", "POST"])
-def set_raceNclass():
-    error = None
-    if request.method == "POST":
-        req_data = json.loads(request.data.decode("utf-8"))
-        chariD = req_data["pc"]["id"]
-        current_char = User.query.get(int(chariD))
-        current_char.chrClass = req_data["pc"]["chrClass"]
-        current_char.race = req_data["pc"]["race"]
-        db.session.commit()
-        setStats(current_char)
-    return charStart(current_char)
-    # gameObj = gameHelper.pyquestHelper()
-
-
-@app.route("/game/tile/<int:tileid>/", methods=["GET", "POST"])
-def game_tile(tileid):
-    error = None
-    if request.method == "GET":
-        current_tile = Tile.query.get(tileid)
-        if current_tile is None:
-            req_data = json.loads(request.data.decode("utf-8"))
-            print(req_data)
-            if req_data["tile"]["userId"] is not None:
-                generate_tile(req_data)
+    @app.route("/", methods=["POST", "GET"])
+    def greet_user():
+        form = gameforms.UserNameForm()
+        if request.method == "POST":
+            if form.validate_on_submit():
+                new_user = model.User()
+                new_user.username = form.username.data
+                # TODO: confirm that this user doesn't already exist in the database
+                # (deduplicate on email)
+                user_exists = False
+                if(not model.user_exists(new_user.username)):
+                    model.db.session.add(new_user)
+                    model.db.session.commit()
+                
+                else:
+                    flash("That user is already taken!")
+                    return render_template("playgame.html", form=form)                 
             else:
-                return {"statusCode": "Please retry with the correct payload format"}
-        return {
-            "Tile Content": current_tile.content,
-            "Content Type": current_tile.content_type,
-            "Next Tile": current_tile.nextTile,
-        }
+                print("Form did not validate!")
+                print(form.errors)
+            return redirect(url_for("setup_char", playerid=new_user.id))
+        else:
+            # the code below is executed if the request method
+            # was GET or the credentials were invalid
+            # greet_hero()
+            return render_template("playgame.html", form=form)
 
+    @app.route("/player/<int:playerid>/setup", methods=["POST", "GET"])
+    def setup_char(playerid):
+        user_profile = model.User.query.get(playerid)
+        form = gameforms.CharacterForm(obj=user_profile)
+        form.charclass.choices = [
+                (PlayerClass.id, PlayerClass.name)
+                for PlayerClass in model.PlayerClass.query.order_by("name")
+            ]
+        form.charrace.choices = [
+                (PlayerRace.id, PlayerRace.name)
+                for PlayerRace in model.PlayerRace.query.order_by("name")
+            ]    
+        # TODO: pre-populate the form with the data from database
+        if request.method == "POST":
+            form.populate_obj(user_profile)
+            # TODO: move this code into a tile_init() function
+            current_tile = model.Tile()
+            tile_type_list = [
+            {"name":tile_type.name, "id":tile_type.id}
+            for tile_type in model.TileTypeOption.query.order_by("name")
+        ]
+            form = gameforms.TileForm()
+            tile_type = random.choice(tile_type_list)
+            form.type.data = tile_type['name']
+            current_tile.user_id = playerid
+            current_tile.type = tile_type['id']
+            user_profile.hitpoints=100
+            model.db.session.add(current_tile)
+            model.db.session.commit()
+            model.db.session.add(user_profile)
+            model.db.session.commit()
+            print("profile saved")
+            return redirect(url_for("char_start", id=user_profile.id))
+        elif request.method == "GET":
+            return render_template(
+                "charsetup.html", player_char=user_profile, form=form
+            )
 
-@app.route("/game/fight/<int:tileid>/<int:moveid>/", methods=["GET", "POST"])
-def fight_loop(tileid):
-    current_tile = Tile.query.get(tileid)
-    current_monster = Monster(
-        name="elephant",
-        race="none",
-        strength=1,
-        intelligence=1,
-        hitpoints=2,
-        stealth=1,
-        level=1,
-        tiles=tileid)
-    #monsterObj = pqMonsters.npcMonster(pc.chrLevel)
-    #tile_message = f"Suddenly a {current_monster.name} appears!"
-    current_tile.tile_content = "FIGHT TO THE DEATH"
-    #turnCount = 0
-    user_char = User.query.get(current_tile.userId)
-    while user_char.hitpoints > 0 and current_monster.hitpoints > 0:
-        fightCommand = input("What is your next Fight Move?")
-        if fightCommand == "attack" or fightCommand == "a":
-            pc.doAttack(monsterObj)
-        elif fightCommand == "magic" or fightCommand == "m":
-            if pc.chrClass != "wiz":
-                print("You have no magic!")
+    @app.route("/player/<int:id>/start", methods=["POST", "GET"])
+    def char_start(id):
+        # TODO: query db to get user profile
+        char_message = "This is a test message to be displayed when the player first starts the game"
+        # player_char.getStats()
+        return render_template(
+            "charStart.html", charMessage=char_message, player_char_id=id)
+
+    @app.route("/player/<int:player_id>/game/tile/next", methods=["POST", "GET"])
+    def generate_tile(player_id):
+        user_profile = model.User.query.get(player_id)
+        tile_details = model.Tile.query.filter_by(user_id=player_id).order_by(model.Tile.id.desc()).first()
+        print(f"Queried tile details: {tile_details.id}")
+        if tile_details:
+            form = gameforms.TileForm(obj=tile_details)
+        else:
+            print("Tile details empty")
+        form.tileid = tile_details.id
+        print(f"Form TileId: {form.tileid}")
+        tile_type_list = [
+            {"name":tile_type.name, "id":tile_type.id}
+            for tile_type in model.TileTypeOption.query.order_by("name")
+        ]
+        print(f"Tile_type_List: {tile_type_list}")
+        form.type.data = random.choice(tile_type_list)['name']
+
+        form.tileaction.choices = [
+            (tileaction.id, tileaction.name)
+            for tileaction in model.ActionOption.query.order_by("name")
+        ]
+        # if the request was a POST, generate a new tile then display it using gameTile.html
+        if request.method == "POST":
+            if not tile_details.action_taken:
+                return {'Error': 'Please action this tile before continuing!'}
+            # start tile_init() code
+            current_tile = model.Tile()
+            current_tile.type = random.choice(tile_type_list)['id']
+            current_tile.user_id = player_id
+            if form.tileaction.data:
+                current_tile.action = form.tileaction.data
             else:
-                pc.doMagic(monsterObj)
-        elif fightCommand == "flee" or fightCommand == "fl":
-            if pc.doFlee(monsterObj):
-                break
-            else:
-                print("You're not able to run away!")
-                pass
-        elif fightCommand == "help" or fightCommand == "h":
-            gameObj.fightHelp(pc)
-        
-        if current_monster.hitpoints > 0:
-            current_monster.doAttack(user_char)
-    if current_monster.hitpoints <= 0:
-        user_char.setExp(current_monster)
+                print("current tile has no action data!")
+            model.db.session.add(current_tile)
+            model.db.session.commit()
+            model.db.session.add(user_profile)
+            model.db.session.commit()
+        return render_template("gameTile.html", player_char=user_profile, form=form)
 
+    @app.route(
+        "/player/<int:playerid>/game/tile/<int:tileid>/action",
+        methods=["POST", "GET"],
+    )
+    def execute_tile_action(playerid, tileid):
+        tile_record = model.Tile.query.get(tileid)
+        tileForm = gameforms.TileForm(obj=tile_record)
+        action_type_ID = tileForm.data.get('tileaction')
+        if request.method == "POST":
+            # validate actionID, return error message if not valid
+            if action_type_ID not in [1, 2, 3, 4]:
+                return {"Error": "Bad action selected"}
+            action_record = model.Action.query.filter_by(tile=tileid, actionverb=action_type_ID).first()
+            if action_record:
+                print(f"Action_record ID: {action_record.id}")
+            if tile_record.action_taken == True:
+                return {"Error": "tile has already been actioned"}
+            # handle rest
+            player_record = model.User.query.get(playerid)
+            print(f"Player_id: {player_record.id}")
+            if action_type_ID == 1:  # if requested action is to rest..
+                tile_record.action = 1
+                player_record.hitpoints += 10
+            if action_type_ID == 3:  # if requested action is to fight..
+                tile_record.action = 3  # save the action to the tile
+            tile_record.user_id = player_record.id
+            tile_record.action_taken = True
+            model.db.session.add(tile_record)
+            model.db.session.add(player_record)
+            model.db.session.commit()
+            # handle flee from tile
+            return {'status_code':200, 'data':'success'}
+        else:
+            return {'status_code':200, 'data': {'tile_action':tile_record.action, 'action_taken':tile_record.action_taken, 'user_id':tile_record.user_id}}
 
-@app.route("/game/end", methods=["GET"])
-def end_game(userid):
-    pc.getStats()
-    pc.setDead(current_tile)
-    gameObj.createHighScore(current_tile, pc)
+    @app.route("/player/<int:id>/profile", methods=["GET"])
+    def get_user_profile(id):
+        pass
 
+    if __name__ == "__main__":
+        with open("game_config.ini", "r") as fin:
+            config_json = json.load(fin)
+        tile_config = gameTile.pqGameTile()
+        app.run()
 
-with open("game_config.ini", "r") as fin:
-    config_json = json.load(fin)
-tile_config = gameTile.pqGameTile()
-
-
-def generate_tile(req_data):
-    current_tile = Tile(content_type=" ", content=" ")
-    current_tile.userId = req_data["tile"]["userId"]
-    tile_type_list = ["monster", "sign", "scene"]
-    current_tile.content_type = random.choice(tile_type_list)
-    treasureFound = random.randint(1, 100)
-    db.session.add(current_tile)
-    db.session.commit()
-    if treasureFound == 4:
-        current_tile.content_type = "treasure"
-    if current_tile.content_type == "scene":
-        current_tile.content = (
-            "you find a scenic path, but nothing of interests catches your eye."
-        )
-        current_tile.nextTile = f"/game/tile/{current_tile.id+1}/"
-    elif current_tile.content_type == "sign":
-        current_tile.content = "there is a sign here!"
-        current_tile.nextTile = f"/game/tile/{current_tile.id+1}/"
-    elif current_tile.content_type == "monster":
-        current_tile.content = "Monster!"
-        current_tile.nextTile = f"/game/fight/{current_tile.id+1}/"
-    elif current_tile.content_type == "treasure":
-        current_tile.nextTile = f"/game/tile/{current_tile.id+1}/"
-        current_tile.content = "beautiful treasure!"
-    db.session.add(current_tile)
-    db.session.commit()
-
-
-def greetHero():
-    greet_message = "Hello Weary traveler, I think I've seen you before.\n"
-    greet_message += "What was your name again?"
-    # while pc.name == "" or pc.name == "player1":
-    #     pc.setName()
-    return {"greet_message": greet_message, "next_page": "newplayer"}
-
-
-def movePenalty(pc):
-    pc.hitpoints = pc.hitpoints - 1
-
-
-def gameIntro(pc):
-    intro_message = "Welcome to Pyquest!"
-    intro_message += "the story begins on a cold dark night..."
-    intro_message += f"our hero, {pc.name}, goes out looking for adventure..."
-    intro_message += "when suddenly!"
-
-    return {"intro_message": intro_message, "next_page": "chooseClass"}
-
-
-def charStart(pc):
-    # CharacterMessage = pc.getStats()
-    CharacterMessage = "test"
-    return {"charMessage": CharacterMessage, "next_page": "/game/tile/1"}
-
-
-def gameLoop(pc, gameObj):
-    # pc.setStats()
-    while pc.hitpoints is not None and pc.hitpoints > 0:
-        getChrInput = input("What to do Next?")
-        if getChrInput == "rest" or getChrInput == "r":
-            if pc.hitpoints < pc.maxhp:
-                print(f"Currently Have {pc.hitpoints} out of {pc.maxhp} hitpoints")
-                pc.doRestHP()
-                if pc.expPoints >= pc.nextLevelExp:
-                    pc.doLevelUp()
-                pc.getStats()
-        elif getChrInput == "move" or getChrInput == "m":
-            print(current_tile.tile_content_type)
-            if current_tile.tile_content_type == "monster":
-                fightLoop(pc, current_tile)
-            elif current_tile.tile_content_type == "scene":
-                print(
-                    "you find a scenic path, but nothing of interests catches your eye."
-                )
-        elif getChrInput == "loot" or getChrInput == "l":
-            if current_tile.tile_content_type == "treasure":
-                print("beautiful treasure!")
-            print("you look for loot but find none!")
-        elif getChrInput == "stats" or getChrInput == "s":
-            pc.getStats()
-        elif getChrInput == "exit":
-            print(f"you arrived to tile number: {current_tile.tile_id}")
-            # gameObj.createHighScore(current_tile, pc)
-            exit()
-        elif getChrInput == "help":
-            print("Command list:")
-            print("[r]est, [m]ove, [l]oot, [s]tats, exit, [h]elp")
-        # enable for faster death!
-        # movePenalty(pc)
-        # gameObj.clearScreen()
-    print("\n\n")
-
-
-# print("Main Menu\nType help for a list of commands\n")
-# chrCommand = input("")
-# while chrCommand != "exit":
-#     if chrCommand == "help":
-#         gameObj.showHelp()
-#         chrCommand = input("Main Menu\nType help for a list of commands\n")
-#     elif chrCommand == "stats":
-#         pc.getStats()
-#         chrCommand = input("Main Menu\nType help for a list of commands\n")
-#     elif chrCommand == "play":
-#         gameLoop(pc, gameObj)
-#         chrCommand = input("Main Menu\nType help for a list of commands\n")
-#     else:
-#         chrCommand = input("Main Menu\nType help for a list of commands\n")
-
-
-def setStats(User):
-    # start by setting all stats to default values
-    User.strength = 10
-    User.intelligence = 10
-    User.maxhp = 100
-    User.stealth = 10
-    User.expPoints = 1
-    # elves are weak, smart, and stealth
-    if User.race == "elf":
-        User.strength -= 5
-        User.intelligence += 5
-        User.stealth += 5
-        User.maxhp = 80
-    # Hobbits are midly strong, midly smart, but stealthy
-    elif User.race == "hbt":
-        User.strength += 2
-        User.intelligence -= 1
-        User.stealth += 5
-        User.maxhp = 100
-    # Kajit are strong, dumb, but stealthy
-    elif User.race == "kjt":
-        User.strength += 5
-        User.intelligence -= 5
-        User.stealth += 5
-        User.maxhp = 120
-    # wizards are smart, but gain no strength or stealth bonus
-    if User.chrClass == "wiz":
-        # hero['stats']['str'] -= 5
-        User.intelligence += 5
-        # hero['stats']['stl'] += 5
-        User.maxhp = User.maxhp * 0.9
-    # paladins are midly strong, and midly smart but lack in stealth
-    elif User.chrClass == "pldn":
-        User.strength += 2
-        User.intelligence += 2
-        User.stealth -= 5
-        User.maxhp = User.maxhp * 1.25
-    # Warriors are strong, dumb, and not sneaky. but strong.
-    elif User.chrClass == "warr":
-        User.strength += 5
-        User.intelligence -= 5
-        User.stealth -= 5
-        User.maxhp = User.maxhp * 1.5
-    User.hitpoints = User.maxhp
-    db.session.commit()
+    return app

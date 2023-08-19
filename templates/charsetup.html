@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>PyQuest Game</title>
+</head>
+<body>
+    <ul id="navigation">
+    {% for item in navigation %}
+        <li><a href="{{ item.href }}">{{ item.caption }}</a></li>
+    {% endfor %}
+    </ul>
+
+    <h1>PyQuest Game</h1>
+    <h2>Character setup</h2>
+    <div>Welcome {{player_char.username}}, lets get to know you...</div>
+
+    {% from "_formhelpers.html" import render_field %} 
+    <form method=post action="/player/{{player_char.id}}/setup">
+        {{ form.csrf_token }}
+        <dl>
+            {{render_field(form.name)}}
+            {{render_field(form.charclass)}}
+            {{render_field(form.charrace)}}
+        </dl>
+        <p><input type=submit value="Setup"></p>
+        {% if error %}
+        <p class="error"><strong>Error:</strong>{{ error}}</p>
+        {% endif %}
+    </form>
+</body>
+</html>

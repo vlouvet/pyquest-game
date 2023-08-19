@@ -1,2 +1,4 @@
 flask
 flask-sqlalchemy
+pytest
+Flask-WTF
