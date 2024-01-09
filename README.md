@@ -1,5 +1,5 @@
 # pyquest-game
-a text-based RPG game with rogue like elements, written completely in python
+A text-based RPG game with rogue like elements, written completely in python
 
 
 Current Features:
