@@ -40,14 +40,12 @@ def create_app():
                 print(form.errors)
             return redirect(url_for("setup_char", playerid=new_user.id))
         else:
-            # the code below is executed if the request method
-            # was GET or the credentials were invalid
-            # greet_hero()
             return render_template("playgame.html", form=form)
 
     @app.route("/player/<int:playerid>/setup", methods=["POST", "GET"])
     def setup_char(playerid):
         user_profile = model.User.query.get_or_404(playerid)
+        user_profile_id = user_profile.id
         form = gameforms.CharacterForm(obj=user_profile)
         form.charclass.choices = [
             (PlayerClass.id, PlayerClass.name)
@@ -69,7 +67,7 @@ def create_app():
             form = gameforms.TileForm()
             tile_type = random.choice(tile_type_list)
             form.type.data = tile_type["name"]
-            current_tile.user_id = playerid
+            current_tile.user_id = user_profile_id
             current_tile.type = tile_type["id"]
             user_profile.hitpoints = 100
             model.db.session.add(current_tile)
@@ -77,7 +75,7 @@ def create_app():
             model.db.session.add(user_profile)
             model.db.session.commit()
             print("profile saved")
-            return redirect(url_for("char_start", id=user_profile.id))
+            return redirect(url_for("char_start", id=user_profile_id))
         elif request.method == "GET":
             return render_template(
                 "charsetup.html", player_char=user_profile, form=form
