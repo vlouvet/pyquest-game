@@ -29,8 +29,9 @@ def create_app():
             if form.validate_on_submit():
                 new_user = model.User()
                 new_user.username = form.username.data
-                # TODO: confirm that this user doesn't already exist in the database
-                # (deduplicate on email)
+                # deduplicate the user based on username
+                user_exists = model.user_exists(new_user.username)
+                
                 user_exists = False
                 if not model.user_exists(new_user.username):
                     model.db.session.add(new_user)
@@ -107,10 +108,14 @@ def create_app():
         print(f"Queried tile details: {tile_details.id}")
         if tile_details:
             form = gameforms.TileForm(obj=tile_details)
+            print(f"Form TileId: {form.tileid}")
+            #log form tileid to debug logging:
+            app.logger.debug(f"Form TileId: {form.tileid}")
         else:
             print("Tile details empty")
+            return {"Error": "Tile details empty"}
         form.tileid = tile_details.id
-        print(f"Form TileId: {form.tileid}")
+        
         tile_type_list = [
             {"name": tile_type.name, "id": tile_type.id}
             for tile_type in model.TileTypeOption.query.order_by("name")
