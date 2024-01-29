@@ -1,11 +1,11 @@
 #testapp.py
 import pytest
-from pq_app import app as pq_app
+from pq_app import app as pq
 
 
 @pytest.fixture()
 def app():
-    app = pq_app.create_app()
+    app = pq.create_app()
     yield app
 
 
