@@ -57,26 +57,27 @@ def new_char():
     error = None
     if request.method == 'POST':
         req_data = json.loads(request.data.decode('utf-8'))
-        newChar = User(name=req_data['pc']['name'])
+        newChar = User()
+        newChar.username = req_data['pc']['name']
         db.session.add(newChar)
-        exit()
         db.session.commit()
         print(f"User ID: {newChar.id}")
         pc = userCharacter.playerCharacter(req_data['pc']['name'])
-    # the code below is executed if the request method
-    # was GET or the credentials were invalid
-    return gameIntro(pc)
+        return gameIntro(pc)
+    return greetHero()
 
 @app.route("/chooseRaceClass", methods=['POST', 'GET'])
 def set_raceNclass():
     error = None
     if request.method == 'POST':
         req_data = json.loads(request.data.decode('utf-8'))
-        pc = userCharacter.playerCharacter(req_data['pc'])
-        pc.setRace(req_data)
-        pc.setClass(req_data)
-        pc.setStats()
-    return charStart(pc)
+        pc = userCharacter.playerCharacter(name="things")
+        pc.set_name(req_data)
+        pc.set_race(req_data)
+        pc.set_class(req_data)
+        pc.set_stats(req_data)
+        return charStart(pc)
+    return greetHero()
     # gameObj = gameHelper.pyquestHelper()
 
 
@@ -145,7 +146,7 @@ def gameLoop(pc, gameObj):
             current_tile = generate_tile()
             print(current_tile.tile_content_type)
             if current_tile.tile_content_type == "monster":
-                fightLoop(pc, current_tile)
+                fightLoop(pc, current_tile, gameObj)
             elif current_tile.tile_content_type == "scene":
                 print(
                     "you find a scenic path, but nothing of interests catches your eye."
@@ -172,8 +173,8 @@ def gameLoop(pc, gameObj):
     gameObj.createHighScore(current_tile, pc)
 
 
-def fightLoop(pc, current_tile):
-    monsterObj = pqMonsters.npcMonster(pc.chrLevel)
+def fightLoop(pc, current_tile, gameObj):
+    monsterObj = pqMonsters.NPCMonster()
     print(f"Suddenly a {monsterObj.name} appears!")
     current_tile.tile_content = "FIGHT TO THE DEATH"
     print(f"tile content: {current_tile.tile_content}")
@@ -198,7 +199,7 @@ def fightLoop(pc, current_tile):
                 print("You're not able to run away!")
                 pass
         if monsterObj.hitpoints >0:
-            monsterObj.doAttack(pc)
+            monsterObj.do_attack(pc)
         
     if monsterObj.hitpoints <= 0:
         pc.setExp(monsterObj)

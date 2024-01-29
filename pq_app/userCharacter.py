@@ -15,7 +15,7 @@ class playerCharacter:
         self.chrLevel = 1
         self.nextLevelExp = self.chrLevel * 100
 
-    def set_name(self):
+    def set_name(self, data):
         userInput = input("Please enter your character's name:")
         if userInput != "exit":
             self.name = userInput
@@ -23,25 +23,25 @@ class playerCharacter:
             print("Exit requested")
             exit()
 
-    def set_class(self):
+    def set_class(self, data):
         userInput = input("what is your class?\n[wiz,pldn,warr]\n")
         if userInput == "exit":
             exit()
         elif userInput not in ["wiz", "pldn", "warr"]:
             print("that is not a valid class, Try again!")
-            self.set_class()
+            self.set_class(None)
         else:
             self.chrClass = userInput
 
-    def set_race(self):
+    def set_race(self, data):
         userInput = input("what is your race?\n[elf,hbt,kjt]\n")
         if userInput not in ["elf", "hbt", "kjt"]:
             print("that is not a valid class, Try again!")
-            self.set_race()
+            self.set_race(None)
         else:
             self.race = userInput
 
-    def set_stats(self):
+    def set_stats(self, data):
         # start by setting all stats to default values
         self.strength = 10
         self.intelligence = 10
