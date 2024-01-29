@@ -1,7 +1,5 @@
 #testapp.py
-import pytest, flask
-from flask_wtf.csrf import generate_csrf
-from flask.testing import FlaskClient as BaseFlaskClient
+import pytest
 from pq_app import app as pq_app
 
 
