@@ -1,14 +1,16 @@
-version: '3'
+version: '3.7'
+
 services:
   flask-app:
-    build: .
-    ports:
-      - 5000:5000
+    mem_limit: 256m  # Set the memory limit to 512 megabytes
+    build:
+      context: .
+      dockerfile: Dockerfile
 
   nginx-app:
     image: nginx
     ports:
-      - 5001:5000
+      - 5555:5001
     depends_on:
       - flask-app
     volumes:
