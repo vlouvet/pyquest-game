@@ -47,7 +47,7 @@ def create_app():
 
     @app.route("/player/<int:playerid>/setup", methods=["POST", "GET"])
     def setup_char(playerid):
-        user_profile = model.User.query.get(playerid)
+        user_profile = model.User.query.get_or_404(playerid)
         form = gameforms.CharacterForm(obj=user_profile)
         form.charclass.choices = [
             (PlayerClass.id, PlayerClass.name)
