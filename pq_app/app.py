@@ -2,12 +2,7 @@ import json
 import random
 from flask import Flask, request, render_template, redirect, url_for, flash
 
-import model
-import userCharacter
-import gameforms
-import pqMonsters
-import gameTile
-
+from . import model, userCharacter, gameforms, pqMonsters, gameTile
 
 def create_app():
     # create the extension
