@@ -26,9 +26,6 @@ def create_app():
                 new_user = model.User()
                 new_user.username = form.username.data
                 # deduplicate the user based on username
-                user_exists = model.user_exists(new_user.username)
-
-                user_exists = False
                 if not model.user_exists(new_user.username):
                     model.db.session.add(new_user)
                     model.db.session.commit()
