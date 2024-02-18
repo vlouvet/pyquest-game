@@ -4,6 +4,7 @@ from flask import Flask, request, render_template, redirect, url_for, flash
 
 from . import model, userCharacter, gameforms, pqMonsters, gameTile
 
+
 def create_app():
     # create the extension
 
@@ -26,7 +27,7 @@ def create_app():
                 new_user.username = form.username.data
                 # deduplicate the user based on username
                 user_exists = model.user_exists(new_user.username)
-                
+
                 user_exists = False
                 if not model.user_exists(new_user.username):
                     model.db.session.add(new_user)
@@ -42,9 +43,9 @@ def create_app():
         else:
             return render_template("playgame.html", form=form)
 
-    @app.route("/player/<int:playerid>/setup", methods=["POST", "GET"])
-    def setup_char(playerid):
-        user_profile = model.User.query.get_or_404(playerid)
+    @app.route("/player/<int:player_id>/setup", methods=["POST", "GET"])
+    def setup_char(player_id):
+        user_profile = model.User.query.get_or_404(player_id)
         user_profile_id = user_profile.id
         form = gameforms.CharacterForm(obj=user_profile)
         form.charclass.choices = [
@@ -80,6 +81,8 @@ def create_app():
             return render_template(
                 "charsetup.html", player_char=user_profile, form=form
             )
+        else:
+            return {"Error": "Invalid request method"}
 
     @app.route("/player/<int:id>/start", methods=["POST", "GET"])
     def char_start(id):
@@ -102,13 +105,13 @@ def create_app():
         if tile_details:
             form = gameforms.TileForm(obj=tile_details)
             print(f"Form TileId: {form.tileid}")
-            #log form tileid to debug logging:
+            # log form tileid to debug logging:
             app.logger.debug(f"Form TileId: {form.tileid}")
         else:
             print("Tile details empty")
             return {"Error": "Tile details empty"}
         form.tileid = tile_details.id
-        
+
         tile_type_list = [
             {"name": tile_type.name, "id": tile_type.id}
             for tile_type in model.TileTypeOption.query.order_by("name")
@@ -184,7 +187,8 @@ def create_app():
 
     @app.route("/player/<int:id>/profile", methods=["GET"])
     def get_user_profile(id):
-        pass
+        user_profile = model.User.query.get_or_404(id)
+        return render_template("profile.html", player_char=user_profile)
 
     if __name__ == "__main__":
         with open("game_config.ini", "r") as fin:

@@ -8,7 +8,7 @@ class User(db.Model):
     username = db.Column(db.String, unique=True, nullable=False)
     email = db.Column(db.String)
     hitpoints = db.Column(db.Integer)
-    tiles = db.relationship('Tile', backref='user')
+    tiles = db.relationship("Tile", backref="user")
     playerclass = db.Column(db.Integer, db.ForeignKey("playerclass.id"))
     playerrace = db.Column(db.Integer, db.ForeignKey("playerrace.id"))
 
@@ -18,7 +18,7 @@ class Tile(db.Model):
     action_taken = db.Column(db.Boolean, default=False)
     type = db.Column(db.Integer, db.ForeignKey("tiletypeoption.id"))
     action = db.Column(db.Integer, db.ForeignKey("action.id"))
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
 
 
 class Action(db.Model):
@@ -62,7 +62,8 @@ def init_defaults():
             {"name": "quit"},
         ]
         for act_opt in action_options:
-            current_act_opt = ActionOption(name=act_opt["name"])
+            current_act_opt = ActionOption()
+            current_act_opt.name=act_opt["name"]
             db.session.add(current_act_opt)
         db.session.commit()
     if TileTypeOption.query.first() is None:
@@ -73,21 +74,25 @@ def init_defaults():
             {"name": "treasure"},
         ]
         for tile_type in tile_types:
-            current_tile_type = TileTypeOption(name=tile_type["name"])
+            current_tile_type = TileTypeOption()
+            current_tile_type.name=tile_type["name"]
             db.session.add(current_tile_type)
         db.session.commit()
     if PlayerClass.query.first() is None:
         tile_types = [{"name": "witch"}, {"name": "fighter"}, {"name": "healer"}]
         for tile_type in tile_types:
-            current_tile_type = PlayerClass(name=tile_type["name"])
+            current_tile_type = PlayerClass()
+            current_tile_type.name=tile_type["name"]
             db.session.add(current_tile_type)
         db.session.commit()
     if PlayerRace.query.first() is None:
         tile_types = [{"name": "Human"}, {"name": "Elf"}, {"name": "Pandarian"}]
         for tile_type in tile_types:
-            current_tile_type = PlayerRace(name=tile_type["name"])
+            current_tile_type = PlayerRace()
+            current_tile_type.name=tile_type["name"]
             db.session.add(current_tile_type)
         db.session.commit()
+
 
 def user_exists(username):
     user = User.query.filter_by(username=username).first()
