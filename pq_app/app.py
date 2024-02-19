@@ -29,14 +29,15 @@ def create_app():
                 if not model.user_exists(new_user.username):
                     model.db.session.add(new_user)
                     model.db.session.commit()
-
+                    new_user = model.User.query.filter_by(username=new_user.username).first()
+                    return redirect(url_for("setup_char", player_id=new_user.id))
                 else:
                     flash("That user is already taken!")
                     return render_template("playgame.html", form=form)
             else:
                 print("Form did not validate!")
                 print(form.errors)
-            return redirect(url_for("setup_char", playerid=new_user.id))
+                return render_template("playgame.html", form=form)
         else:
             return render_template("playgame.html", form=form)
 
@@ -136,6 +137,8 @@ def create_app():
             model.db.session.commit()
             model.db.session.add(user_profile)
             model.db.session.commit()
+            tile_details =model.Tile.query.filter_by(user_id=player_id).order_by(model.Tile.id.desc()).first()
+            form.tileid = tile_details.id
         return render_template("gameTile.html", player_char=user_profile, form=form)
 
     @app.route(
@@ -170,8 +173,9 @@ def create_app():
             model.db.session.add(tile_record)
             model.db.session.add(player_record)
             model.db.session.commit()
-            # handle flee from tile
-            return {"status_code": 200, "data": "success"}
+            # return the generate tile function to display the next tile
+            return redirect(url_for("generate_tile", player_id=playerid))
+            # return {"status_code": 200, "data": "success"}
         else:
             return {
                 "status_code": 200,
