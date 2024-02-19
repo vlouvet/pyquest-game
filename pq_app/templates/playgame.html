@@ -7,11 +7,11 @@
 
 <body>
     {% with messages = get_flashed_messages() %}
-       {% if messages %}
-          {% for message in messages %}
-             {{ message }}
-          {% endfor %}
-       {% endif %}
+        {% if messages %}
+            {% for message in messages %}
+                {{ message }}
+            {% endfor %}
+        {% endif %}
     {% endwith %}
 
     <ul id="navigation">
