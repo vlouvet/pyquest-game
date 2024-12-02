@@ -220,8 +220,10 @@ def create_app():
     @login_required
     def execute_tile_action(playerid, tileid):
         tile_record = model.Tile.query.get(tileid)
-        tileForm = gameforms.TileForm(obj=tile_record)
-        action_type_ID = tileForm.data.get("tileaction")
+        # populate the tileForm object with the tile record
+        tileForm = gameforms.TileForm()
+        tileForm.populate_obj(tile_record)
+        action_type_ID = tileForm.data.get("action")
         if request.method == "POST":
             # validate actionID is in the list of valid actions table
             if not action_type_ID:
