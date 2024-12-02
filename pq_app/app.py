@@ -2,6 +2,8 @@ import json
 import random
 import random
 from flask import Flask, request, render_template, redirect, url_for, flash
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
 from . import model, userCharacter, gameforms, pqMonsters, gameTile
 
 
@@ -14,11 +16,50 @@ def create_app():
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///pyquest_game.db"
     # initialize the app with the extension
     model.db.init_app(app)
+    login_manager = LoginManager()
+    login_manager.init_app(app)
+    login_manager.login_view = "login"
     with app.app_context():
         model.db.create_all()
         model.init_defaults()
 
+    @login_manager.user_loader
+    def load_user(user_id):
+        return model.User.query.get(int(user_id))
+
+    @app.route("/register", methods=["GET", "POST"])
+    def register():
+        form = gameforms.RegisterForm()
+        if form.validate_on_submit():
+            hashed_password = generate_password_hash(form.password.data, method='sha256')
+            new_user = model.User(username=form.username.data, password=hashed_password)
+            model.db.session.add(new_user)
+            model.db.session.commit()
+            flash("Registration successful! Please log in.")
+            return redirect(url_for("login"))
+        return render_template("register.html", form=form)
+
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        form = gameforms.LoginForm()
+        if form.validate_on_submit():
+            user = model.User.query.filter_by(username=form.username.data).first()
+            if user and check_password_hash(user.password, form.password.data):
+                login_user(user, remember=form.remember.data)
+                return redirect(url_for("greet_user"))
+            else:
+                flash("Login unsuccessful. Please check your username and password.")
+        return render_template("login.html", form=form)
+
+    @app.route("/logout")
+    @login_required
+    def logout():
+        logout_user()
+        flash("You have been logged out.")
+        return redirect(url_for("login"))
+
     @app.route("/", methods=["POST", "GET"])
+    @login_required
     def greet_user():
         form = gameforms.UserNameForm()
         if request.method == "POST":
@@ -44,6 +85,7 @@ def create_app():
             return render_template("playgame.html", form=form)
 
     @app.route("/player/<int:player_id>/setup", methods=["POST", "GET"])
+    @login_required
     def setup_char(player_id):
         user_profile = model.User.query.get_or_404(player_id)
         user_profile_id = user_profile.id
@@ -85,6 +127,7 @@ def create_app():
             return {"Error": "Invalid request method"}
 
     @app.route("/player/<int:id>/start", methods=["POST", "GET"])
+    @login_required
     def char_start(id):
         # TODO: query db to get user profile
         char_message = "This is a test message to be displayed when the player first starts the game"
@@ -95,6 +138,7 @@ def create_app():
     # route for the current tile, using a short url like /play that can be
     # easily accessed by a user that is logged in
     @app.route("/player/<int:player_id>/play", methods=["POST", "GET"])
+    @login_required
     def get_tile(player_id):
         user_profile = model.User.query.get(player_id)
         tile_details = (
@@ -124,6 +168,7 @@ def create_app():
         return render_template("gameTile.html", player_char=user_profile, form=form)
 
     @app.route("/player/<int:player_id>/game/tile/next", methods=["POST", "GET"])
+    @login_required
     def generate_tile(player_id):
         user_profile = model.User.query.get(player_id)
         if request.method == "POST":
@@ -167,6 +212,7 @@ def create_app():
         )
 
     @app.route("/player/<int:playerid>/game/tile/<int:tileid>/action", methods=["POST"])
+    @login_required
     def execute_tile_action(playerid, tileid):
         tile_record = model.Tile.query.get(tileid)
         tileForm = gameforms.TileForm(obj=tile_record)
@@ -204,6 +250,7 @@ def create_app():
             }
 
     @app.route("/player_profile", methods=["GET"])
+    @login_required
     def get_user_profile():
         user_profile = model.User.query.get_or_404(id)
         # if user is logged in, get the user profile
