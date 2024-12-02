@@ -1,15 +1,15 @@
 import json
 import random
+import random
 from flask import Flask, request, render_template, redirect, url_for, flash
-
 from . import model, userCharacter, gameforms, pqMonsters, gameTile
 
 
 def create_app():
     # create the extension
-
     app = Flask(__name__)
-    app.config["SECRET_KEY"] = "7"
+    # set the secret key for the session to a random string
+    app.config["SECRET_KEY"] = random.randbytes(24).hex()
     # configure the SQLite database, relative to the app instance folder
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///pyquest_game.db"
     # initialize the app with the extension
@@ -29,7 +29,9 @@ def create_app():
                 if not model.user_exists(new_user.username):
                     model.db.session.add(new_user)
                     model.db.session.commit()
-                    new_user = model.User.query.filter_by(username=new_user.username).first()
+                    new_user = model.User.query.filter_by(
+                        username=new_user.username
+                    ).first()
                     return redirect(url_for("setup_char", player_id=new_user.id))
                 else:
                     flash("That user is already taken!")
@@ -54,8 +56,8 @@ def create_app():
             (PlayerRace.id, PlayerRace.name)
             for PlayerRace in model.PlayerRace.query.order_by("name")
         ]
-        # TODO: pre-populate the form with the data from database
         if request.method == "POST":
+            # TODO: pre-populate the form with the data from database
             form.populate_obj(user_profile)
             # TODO: move this code into a tile_init() function
             current_tile = model.Tile()
@@ -86,73 +88,93 @@ def create_app():
     def char_start(id):
         # TODO: query db to get user profile
         char_message = "This is a test message to be displayed when the player first starts the game"
-        # player_char.getStats()
         return render_template(
             "charStart.html", charMessage=char_message, player_char_id=id
         )
 
-    @app.route("/player/<int:player_id>/game/tile/next", methods=["POST", "GET"])
-    def generate_tile(player_id):
+    # route for the current tile, using a short url like /play that can be
+    # easily accessed by a user that is logged in
+    @app.route("/player/<int:player_id>/play", methods=["POST", "GET"])
+    def get_tile(player_id):
         user_profile = model.User.query.get(player_id)
         tile_details = (
             model.Tile.query.filter_by(user_id=player_id)
             .order_by(model.Tile.id.desc())
             .first()
         )
-        print(f"Queried tile details: {tile_details.id}")
         if tile_details:
             form = gameforms.TileForm(obj=tile_details)
-            print(f"Form TileId: {form.tileid}")
-            # log form tileid to debug logging:
-            app.logger.debug(f"Form TileId: {form.tileid}")
         else:
-            print("Tile details empty")
             return {"Error": "Tile details empty"}
         form.tileid = tile_details.id
-
-        tile_type_list = [
-            {"name": tile_type.name, "id": tile_type.id}
-            for tile_type in model.TileTypeOption.query.order_by("name")
-        ]
-        print(f"Tile_type_List: {tile_type_list}")
-        form.type.data = random.choice(tile_type_list)["name"]
-
+        form.type.data = tile_details.type
+        if tile_details.type == "sign":
+            form.tilecontent.data = tile_config.generate_signpost()
+        if tile_details.type == "monster":
+            monster = pqMonsters.NPCMonster()
+            form.tilecontent.data = monster.name
+        if tile_details.type == "scene":
+            form.tilecontent.data = "This is a scene tile"
+        if tile_details.type == "treasure":
+            form.tilecontent.data = "This is a treasure tile"
         form.tileaction.choices = [
             (tileaction.id, tileaction.name)
             for tileaction in model.ActionOption.query.order_by("name")
         ]
-        # if the request was a POST, generate a new tile then display it using gameTile.html
+        return render_template("gameTile.html", player_char=user_profile, form=form)
+
+    @app.route("/player/<int:player_id>/game/tile/next", methods=["POST", "GET"])
+    def generate_tile(player_id):
+        user_profile = model.User.query.get(player_id)
         if request.method == "POST":
+            # save the posted form to a var
+            tile_details = gameforms.TileForm()
+            # get the tile type list
+            tile_type_list = [
+                {"name": tile_type.name, "id": tile_type.id}
+                for tile_type in model.TileTypeOption.query.order_by("name")
+            ]
+            # generate a new tile object
             if not tile_details.action_taken:
-                return {"Error": "Please action this tile before continuing!"}
-            # start tile_init() code
+                # re-render the gameTile template and flash an error message reminding the user to action the tile
+                flash("Please action this tile before continuing!")
+                return render_template(
+                    "gameTile.html",
+                    player_char=user_profile,
+                    form=tile_details,
+                    errors=tile_details.errors,
+                )
+            # generate the NEXT tile details
             current_tile = model.Tile()
             current_tile.type = random.choice(tile_type_list)["id"]
             current_tile.user_id = player_id
-            if form.tileaction.data:
-                current_tile.action = form.tileaction.data
+            if tile_details.tileaction.data:
+                current_tile.action = tile_details.tileaction.data
             else:
                 print("current tile has no action data!")
             model.db.session.add(current_tile)
             model.db.session.commit()
             model.db.session.add(user_profile)
             model.db.session.commit()
-            tile_details =model.Tile.query.filter_by(user_id=player_id).order_by(model.Tile.id.desc()).first()
-            form.tileid = tile_details.id
-        return render_template("gameTile.html", player_char=user_profile, form=form)
+            tile_details = (
+                model.Tile.query.filter_by(user_id=player_id)
+                .order_by(model.Tile.id.desc())
+                .first()
+            )
+            tile_details.tileid = tile_details.id
+        return render_template(
+            "gameTile.html", player_char=user_profile, form=tile_details
+        )
 
-    @app.route(
-        "/player/<int:playerid>/game/tile/<int:tileid>/action",
-        methods=["POST", "GET"],
-    )
+    @app.route("/player/<int:playerid>/game/tile/<int:tileid>/action", methods=["POST"])
     def execute_tile_action(playerid, tileid):
         tile_record = model.Tile.query.get(tileid)
         tileForm = gameforms.TileForm(obj=tile_record)
         action_type_ID = tileForm.data.get("tileaction")
         if request.method == "POST":
-            # validate actionID, return error message if not valid
-            if action_type_ID not in [1, 2, 3, 4]:
-                return {"Error": "Bad action selected"}
+            # validate actionID is in the list of valid actions table
+            if not action_type_ID:
+                return {"Error": "No action selected"}
             action_record = model.Action.query.filter_by(
                 tile=tileid, actionverb=action_type_ID
             ).first()
@@ -178,23 +200,22 @@ def create_app():
             # return {"status_code": 200, "data": "success"}
         else:
             return {
-                "status_code": 200,
-                "data": {
-                    "tile_action": tile_record.action,
-                    "action_taken": tile_record.action_taken,
-                    "user_id": tile_record.user_id,
-                },
+                "status_code": 402,
             }
 
-    @app.route("/player/<int:id>/profile", methods=["GET"])
-    def get_user_profile(id):
+    @app.route("/player_profile", methods=["GET"])
+    def get_user_profile():
         user_profile = model.User.query.get_or_404(id)
+        # if user is logged in, get the user profile
+        if not user_profile:
+            return redirect(url_for("greet_user"))
         return render_template("profile.html", player_char=user_profile)
 
     if __name__ == "__main__":
         with open("game_config.ini", "r") as fin:
             config_json = json.load(fin)
         tile_config = gameTile.pqGameTile()
-        app.run()
+        # run the app with debuggin enabled
+        app.run(debug=True)
 
     return app

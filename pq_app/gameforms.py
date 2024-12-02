@@ -1,5 +1,5 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, SelectField, TextAreaField
+from wtforms import StringField, SelectField, TextAreaField, PasswordField, SubmitField
 from wtforms.validators import DataRequired
 
 class CharacterForm(FlaskForm):
@@ -15,3 +15,8 @@ class TileForm(FlaskForm):
     type = StringField(u'Tile Type', render_kw={'readonly':True})
     tilecontent = TextAreaField(u'content', render_kw={'readonly':True})
     tileaction = SelectField(u'Tile Action', coerce=int, validators=[DataRequired()])
+
+class LoginForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired()])
+    password = PasswordField('Password', validators=[DataRequired()])
+    submit = SubmitField('Login')

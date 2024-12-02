@@ -2,3 +2,5 @@ flask
 flask-sqlalchemy
 pytest
 Flask-WTF
+flask-login
+wtforms

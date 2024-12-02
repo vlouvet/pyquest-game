@@ -16,4 +16,4 @@ COPY ./pq_app /app
 
 
 # Set the entrypoint command to run the Flask app
-CMD ["flask", "run", "--host=0.0.0.0", "--port=5000"]
+CMD ["flask", "run", "--host=0.0.0.0", "--port=5000", "--debug"]
