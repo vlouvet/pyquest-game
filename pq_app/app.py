@@ -2,7 +2,13 @@ import json
 import random
 import random
 from flask import Flask, request, render_template, redirect, url_for, flash
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_login import (
+    LoginManager,
+    login_user,
+    logout_user,
+    login_required,
+    current_user,
+)
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import model, userCharacter, gameforms, pqMonsters, gameTile
 
@@ -31,8 +37,12 @@ def create_app():
     def register():
         form = gameforms.RegisterForm()
         if form.validate_on_submit():
-            hashed_password = generate_password_hash(form.password.data, method='pbkdf2:sha256')
-            new_user = model.User(username=form.username.data, password_hash=hashed_password)
+            hashed_password = generate_password_hash(
+                form.password.data, method="pbkdf2:sha256"
+            )
+            new_user = model.User(
+                username=form.username.data, password_hash=hashed_password
+            )
             model.db.session.add(new_user)
             model.db.session.commit()
             flash("Registration successful! Please log in.")
@@ -64,25 +74,11 @@ def create_app():
         form = gameforms.UserNameForm()
         if request.method == "POST":
             if form.validate_on_submit():
-                new_user = model.User()
-                new_user.username = form.username.data
-                # deduplicate the user based on username
-                if not model.user_exists(new_user.username):
-                    model.db.session.add(new_user)
-                    model.db.session.commit()
-                    new_user = model.User.query.filter_by(
-                        username=new_user.username
-                    ).first()
-                    return redirect(url_for("setup_char", player_id=new_user.id))
-                else:
-                    flash("That user is already taken!")
-                    return render_template("playgame.html", form=form)
-            else:
-                print("Form did not validate!")
-                print(form.errors)
-                return render_template("playgame.html", form=form)
-        else:
-            return render_template("playgame.html", form=form)
+                new_user = (
+                    model.User().query.filter_by(username=form.username.data).first()
+                )
+                return redirect(url_for("setup_char", player_id=new_user.id))
+        return render_template("playgame.html", form=form)
 
     @app.route("/player/<int:player_id>/setup", methods=["POST", "GET"])
     @login_required
@@ -201,15 +197,10 @@ def create_app():
             model.db.session.commit()
             model.db.session.add(user_profile)
             model.db.session.commit()
-            tile_details = (
-                model.Tile.query.filter_by(user_id=player_id)
-                .order_by(model.Tile.id.desc())
-                .first()
-            )
+            tile_details = (model.Tile.query.filter_by(user_id=player_id).order_by(model.Tile.id.desc()).first())
             tile_details.tileid = tile_details.id
-        return render_template(
-            "gameTile.html", player_char=user_profile, form=tile_details
-        )
+        return render_template("gameTile.html", player_char=user_profile, form=tile_details)
+
 
     @app.route("/player/<int:playerid>/game/tile/<int:tileid>/action", methods=["POST"])
     @login_required
@@ -249,14 +240,24 @@ def create_app():
                 "status_code": 402,
             }
 
-    @app.route("/player_profile", methods=["GET"])
+    @app.route("/player/<int:player_id>/profile", methods=["GET"])
     @login_required
-    def get_user_profile():
-        user_profile = model.User.query.get_or_404(id)
+    def get_user_profile(player_id):
+        user_profile = model.User.query.get_or_404(player_id)
         # if user is logged in, get the user profile
         if not user_profile:
             return redirect(url_for("greet_user"))
         return render_template("profile.html", player_char=user_profile)
+
+
+    # get history
+    @app.route("/player/<int:player_id>/game/history", methods=["GET"])
+    @login_required
+    def get_history(player_id):
+        # get current logged in user profile
+        user_profile = model.User.query.get(player_id)
+        tile_history = model.Tile.query.filter_by(user_id=player_id).all()
+        return render_template("gameHistory.html", player_char=user_profile, history=tile_history)
 
     if __name__ == "__main__":
         with open("game_config.ini", "r") as fin:
