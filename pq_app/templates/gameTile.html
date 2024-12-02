@@ -9,11 +9,11 @@
     <form action="/player/{{player_char.id}}/game/tile/next" method="post">
         {{ form.csrf_token }}
         <div>{{ form.type.label }}: {{ form.type }}</div>
-        <div>{{ form.tilecontent.label }}: {{ form.tilecontent }}</div>
-        <div>{{ form.tileaction.label }}: {{ form.tileaction }}</div>
+        <div>{{ form.content.label }}: {{ form.content }}</div>
+        <div>{{ form.action.label }}: {{ form.action }}</div>
         <button formaction="/player/{{player_char.id}}/game/tile/{{form.tileid}}/action">Take Action</button>
         
-        <input type="submit" value="Proceed to Next Tile" {% if form.tileaction.data == 'fight' %}disabled{% endif %}>
+        <input type="submit" value="Proceed to Next Tile" {% if form.action.data == 'fight' %}disabled{% endif %}>
     </form>
 
 </body>

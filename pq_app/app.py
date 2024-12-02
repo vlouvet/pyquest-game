@@ -126,9 +126,10 @@ def create_app():
     @login_required
     def char_start(id):
         # TODO: query db to get user profile
+        user_profile = model.User.query.get_or_404(id)
         char_message = "This is a test message to be displayed when the player first starts the game"
         return render_template(
-            "charStart.html", charMessage=char_message, player_char_id=id
+            "charStart.html", charMessage=char_message, player_char_id=user_profile.id
         )
 
     # route for the current tile, using a short url like /play that can be
@@ -145,7 +146,7 @@ def create_app():
         if tile_details:
             form = gameforms.TileForm(obj=tile_details)
         else:
-            return {"Error": "Tile details empty"}
+            return redirect(url_for("generate_tile", player_id=player_id))
         form.tileid = tile_details.id
         form.type.data = tile_details.type
         if tile_details.type == "sign":
@@ -167,38 +168,38 @@ def create_app():
     @login_required
     def generate_tile(player_id):
         user_profile = model.User.query.get(player_id)
+        # save the posted form to a var
+        tile_details = gameforms.TileForm()
+        # get the tile type list
+        tile_type_list = [
+            {"name": tile_type.name, "id": tile_type.id}
+            for tile_type in model.TileTypeOption.query.order_by("name")
+        ]
+        # generate a new tile object
+        if not tile_details.tileaction:
+            # re-render the gameTile template and flash an error message reminding the user to action the tile
+            flash("Please action this tile before continuing!")
+            return render_template(
+                "gameTile.html",
+                player_char=user_profile,
+                form=tile_details,
+                errors=tile_details.errors,
+            )
+        # generate the NEXT tile details
+        current_tile = model.Tile()
+        current_tile.type = random.choice(tile_type_list)["id"]
+        current_tile.user_id = player_id
+        if tile_details.tileaction.data:
+            current_tile.action = tile_details.tileaction.data
+        else:
+            print("current tile has no action data!")
         if request.method == "POST":
-            # save the posted form to a var
-            tile_details = gameforms.TileForm()
-            # get the tile type list
-            tile_type_list = [
-                {"name": tile_type.name, "id": tile_type.id}
-                for tile_type in model.TileTypeOption.query.order_by("name")
-            ]
-            # generate a new tile object
-            if not tile_details.action_taken:
-                # re-render the gameTile template and flash an error message reminding the user to action the tile
-                flash("Please action this tile before continuing!")
-                return render_template(
-                    "gameTile.html",
-                    player_char=user_profile,
-                    form=tile_details,
-                    errors=tile_details.errors,
-                )
-            # generate the NEXT tile details
-            current_tile = model.Tile()
-            current_tile.type = random.choice(tile_type_list)["id"]
-            current_tile.user_id = player_id
-            if tile_details.tileaction.data:
-                current_tile.action = tile_details.tileaction.data
-            else:
-                print("current tile has no action data!")
             model.db.session.add(current_tile)
             model.db.session.commit()
             model.db.session.add(user_profile)
             model.db.session.commit()
-            tile_details = (model.Tile.query.filter_by(user_id=player_id).order_by(model.Tile.id.desc()).first())
-            tile_details.tileid = tile_details.id
+        tile_details = (model.Tile.query.filter_by(user_id=player_id).order_by(model.Tile.id.desc()).first())
+        tile_details.tileid = tile_details.id
         return render_template("gameTile.html", player_char=user_profile, form=tile_details)
 
 
