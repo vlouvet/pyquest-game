@@ -31,8 +31,8 @@ def create_app():
     def register():
         form = gameforms.RegisterForm()
         if form.validate_on_submit():
-            hashed_password = generate_password_hash(form.password.data, method='sha256')
-            new_user = model.User(username=form.username.data, password=hashed_password)
+            hashed_password = generate_password_hash(form.password.data, method='pbkdf2:sha256')
+            new_user = model.User(username=form.username.data, password_hash=hashed_password)
             model.db.session.add(new_user)
             model.db.session.commit()
             flash("Registration successful! Please log in.")
@@ -44,7 +44,7 @@ def create_app():
         form = gameforms.LoginForm()
         if form.validate_on_submit():
             user = model.User.query.filter_by(username=form.username.data).first()
-            if user and check_password_hash(user.password, form.password.data):
+            if user and check_password_hash(user.password_hash, form.password.data):
                 login_user(user, remember=form.remember.data)
                 return redirect(url_for("greet_user"))
             else:

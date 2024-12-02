@@ -1,6 +1,7 @@
 from flask_wtf import FlaskForm
 from wtforms import StringField, SelectField, TextAreaField, PasswordField, SubmitField, BooleanField
 from wtforms.validators import DataRequired, Length, EqualTo, ValidationError
+from . import model  # Import the model module
 
 class CharacterForm(FlaskForm):
     name = StringField('Character Name', validators=[DataRequired()])
