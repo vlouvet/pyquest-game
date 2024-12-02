@@ -1,0 +1,27 @@
+
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Game History for {{ player_char.username }}</h1>
+<table>
+    <thead>
+        <tr>
+            <th>Tile ID</th>
+            <th>Tile Type</th>
+            <th>Action Taken</th>
+            <th>Content</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for tile in history %}
+        <tr>
+            <td>{{ tile.id }}</td>
+            <td>{{ tile.type }}</td>
+            <td>{{ tile.action }}</td>
+            <td>{{ tile.content }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+<a href="{{ url_for('get_tile', player_id=player_char.id) }}">Back to Game</a>
+{% endblock %}
