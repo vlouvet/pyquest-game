@@ -1,11 +1,8 @@
-<!DOCTYPE html>
-<html lang="en">
+{% extends "base.html" %}
 
-<head>
-    <title>PyQuest Game</title>
-</head>
+{% block title %}Character Setup - PyQuest Game{% endblock %}
 
-<body>
+{% block content %}
     {% with messages = get_flashed_messages() %}
         {% if messages %}
             {% for message in messages %}
@@ -23,7 +20,4 @@
         <div>{{ form.username.label }}: {{ form.username }}</div>
         <input type="submit" value="Play">
     </form>
-
-</body>
-
-</html>
+{% endblock %}

@@ -1,9 +1,8 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <title>PyQuest Game</title>
-</head>
-<body>
+{% extends "base.html" %}
+
+{% block title %}PyQuest Game{% endblock %}
+
+{% block content %}
     <h1>PyQuest Game</h1>
     <h2>Tile # {{form.tileid}}</h2>
     <form action="/player/{{player_char.id}}/game/tile/next" method="post">
@@ -12,9 +11,6 @@
         <div>{{ form.content.label }}: {{ form.content }}</div>
         <div>{{ form.action.label }}: {{ form.action }}</div>
         <button formaction="/player/{{player_char.id}}/game/tile/{{form.tileid}}/action">Take Action</button>
-        
         <input type="submit" value="Proceed to Next Tile" {% if form.action.data == 'fight' %}disabled{% endif %}>
     </form>
-
-</body>
-</html>
+    {% endblock %}
