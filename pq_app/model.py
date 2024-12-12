@@ -24,7 +24,7 @@ class User(db.Model, UserMixin):
 class Tile(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     action_taken = db.Column(db.Boolean, default=False)
-    type = db.Column(db.Integer, db.ForeignKey("tiletypeoption.id"))
+    type = db.Column(db.Integer, db.ForeignKey("tiletypeoption.id"), nullable=False)
     action = db.Column(db.Integer, db.ForeignKey("action.id"))
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
     content = db.Column(db.String)

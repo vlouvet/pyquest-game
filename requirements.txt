@@ -4,3 +4,4 @@ pytest
 Flask-WTF
 flask-login
 wtforms
+bs4

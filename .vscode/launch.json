@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Python: Flask in Docker",
+        "type": "debugpy",
+        "request": "launch",
+        "program": "${workspaceFolder}/pq_app/app.py",
+        "env": {
+          "FLASK_APP": "app.py",
+          "FLASK_ENV": "development",
+          "TESTING": "True"
+        },
+        "args": ["run", "--host=0.0.0.0", "--port=5000"],
+        "jinja": true
+      }
+    ]
+  }
+  
