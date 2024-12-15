@@ -3,7 +3,7 @@ from pq_app import create_app, db
 
 @pytest.fixture
 def client():
-    app = create_app('config.TestingConfig')
+    app = create_app()
     with app.test_client() as client:
         with app.app_context():
             db.create_all()

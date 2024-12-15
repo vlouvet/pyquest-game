@@ -7,7 +7,7 @@ from pq_app.model import db, User, Tile, TileTypeOption
 
 @pytest.fixture()
 def app():
-    app = pq.create_app(config_class="config.TestingConfig")
+    app = pq.create_app()
     app.config.update({
         "TESTING": True,
         "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:"

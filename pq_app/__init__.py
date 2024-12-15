@@ -19,14 +19,14 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from . import model, userCharacter, gameforms, pqMonsters, gameTile
 
 
-def create_app(config_class):
+def create_app():
     # create the extension
     app = Flask(__name__)
     # set the secret key for the session to a random string
     app.config["SECRET_KEY"] = random.randbytes(24).hex()
     # configure the SQLite database, relative to the app instance folder
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///pyquest_game.db"
-    app.config.from_object(config_class)
+    # app.config.from_object(config_class)
     # initialize the app with the extension
     model.db.init_app(app)
     login_manager = LoginManager()
