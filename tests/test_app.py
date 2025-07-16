@@ -1,13 +1,11 @@
 #testapp.py
 import pytest
-from pq_app import app as pq
-from bs4 import BeautifulSoup
-from flask import url_for
+from pq_app import create_app
 from pq_app.model import db, User, Tile, TileTypeOption
 
 @pytest.fixture()
 def app():
-    app = pq.create_app()
+    app = create_app()
     app.config.update({
         "TESTING": True,
         "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:"

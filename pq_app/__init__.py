@@ -19,6 +19,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from . import model, userCharacter, gameforms, pqMonsters, gameTile
 
 
+login_manager = LoginManager()
+
 def create_app():
     # create the extension
     app = Flask(__name__)
@@ -29,9 +31,9 @@ def create_app():
     # app.config.from_object(config_class)
     # initialize the app with the extension
     model.db.init_app(app)
-    login_manager = LoginManager()
     login_manager.init_app(app)
-    login_manager.login_view = "login"
+    # Set the login view after initializing the app
+    login_manager.login_view = "login" # type: ignore
     with app.app_context():
         model.db.create_all()
         model.init_defaults()
@@ -44,12 +46,13 @@ def create_app():
     def register():
         form = gameforms.RegisterForm()
         if form.validate_on_submit():
+            password = form.password.data or ""
             hashed_password = generate_password_hash(
-                form.password.data, method="pbkdf2:sha256"
+                password, method="pbkdf2:sha256"
             )
-            new_user = model.User(
-                username=form.username.data, password_hash=hashed_password
-            )
+            new_user = model.User()
+            new_user.username = form.username.data
+            new_user.password_hash = hashed_password
             model.db.session.add(new_user)
             model.db.session.commit()
             flash("Registration successful! Please log in.")
@@ -62,7 +65,7 @@ def create_app():
         if request.method == "POST":
             #if form.validate_on_submit():
                 user = model.User.query.filter_by(username=form.username.data).first()
-                if user and check_password_hash(user.password_hash, form.password.data):
+                if user and check_password_hash(user.password_hash, form.password.data or ""):
                     login_user(user, remember=form.remember.data)
                     return redirect(url_for("greet_user"))
                 else:
@@ -90,7 +93,11 @@ def create_app():
                 new_user = (
                     model.User().query.filter_by(username=form.username.data).first()
                 )
-                return redirect(url_for("setup_char", player_id=new_user.id))
+                if new_user:
+                    return redirect(url_for("setup_char", player_id=new_user.id))
+                else:
+                    flash("User not found.")
+                    return render_template("playgame.html", form=form)
         return render_template("playgame.html", form=form)
 
     @app.route("/player/<int:player_id>/setup", methods=["POST", "GET"])
@@ -159,9 +166,13 @@ def create_app():
             .first()
         )
         form = gameforms.TileForm(obj=tile_details)
-        form.tileid = tile_details.id
-        # set the form type data to the name value from the TileTypeOption table using tile_details.type as a foreign key 
-        form.type.data = model.TileTypeOption.query.get(tile_details.type)
+        if tile_details is not None:
+            form.tileid = tile_details.id
+            # set the form type data to the name value from the TileTypeOption table using tile_details.type as a foreign key 
+            form.type.data = model.TileTypeOption.query.get(tile_details.type)
+        else:
+            form.tileid.data = ""
+            form.type.data = None
         if form.type.data == "sign":
             form.content.data = tile_config.generate_signpost()
         if form.type.data == "monster":
@@ -203,7 +214,7 @@ def create_app():
             .first()
         )
         # if the tile has not been actioned redirect to that tile page
-        if not tile_record.action_taken:
+        if tile_record is not None and not tile_record.action_taken:
             return redirect(url_for("get_tile", player_id=player_id))
         # save the posted form to a var
         tile_details = gameforms.TileForm()
@@ -236,7 +247,10 @@ def create_app():
             model.db.session.add(user_profile)
             model.db.session.commit()
         # tile_details = (model.Tile.query.filter_by(user_id=player_id).order_by(model.Tile.id.desc()).first())
-        tile_details.tileid = tile_record.id
+        if tile_record is not None:
+            tile_details.tileid.data = tile_record.id
+        else:
+            tile_details.tileid.data = ""
         return render_template("gameTile.html", player_char=user_profile, form=tile_details)
 
 
@@ -257,10 +271,14 @@ def create_app():
             ).first()
             if action_record:
                 print(f"Action_record ID: {action_record.id}")
+            if tile_record is None:
+                return {"Error": "Tile record not found"}
             if tile_record.action_taken == True:
                 return {"Error": "tile has already been actioned"}
             # handle rest
             player_record = model.User.query.get(playerid)
+            if player_record is None:
+                return {"Error": "Player record not found"}
             print(f"Player_id: {player_record.id}")
             if action_type_ID == 1:  # if requested action is to rest..
                 tile_record.action = 1
