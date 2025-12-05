@@ -55,7 +55,7 @@ def logout():
 
 
 @main_bp.route("/", methods=["POST", "GET"])
-# @login_required
+@login_required
 def greet_user():
     form = gameforms.UserNameForm()
     if request.method == "POST":

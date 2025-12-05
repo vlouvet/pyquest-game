@@ -7,8 +7,9 @@ import random
 from flask import Flask
 from flask_login import LoginManager
 from . import model
-# from . import app
+
 login_manager = LoginManager()
+
 
 def create_app():
     app = Flask(__name__)
@@ -16,10 +17,15 @@ def create_app():
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///pyquest_game.db"
     model.db.init_app(app)
     login_manager.init_app(app)
-    login_manager.login_view = "main.login"  # type: ignore
+    login_manager.login_view = "main.login"
 
     with app.app_context():
         model.db.create_all()
         model.init_defaults()
+
+    # Register the blueprint
+    from .app import main_bp
+
+    app.register_blueprint(main_bp)
 
     return app

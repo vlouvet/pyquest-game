@@ -6,7 +6,7 @@
 </head>
 <body>
     <h1>Login</h1>
-    <form method="POST" action="{{ url_for('login') }}">
+    <form method="POST" action="{{ url_for('main.login') }}">
         {{ form.hidden_tag() }}
         <p>
             {{ form.username.label }}<br>
@@ -24,6 +24,6 @@
         </p>
         <p>{{ form.submit() }}</p>
     </form>
-    <p>Don't have an account? <a href="{{ url_for('register') }}">Register here</a></p>
+    <p>Don't have an account? <a href="{{ url_for('main.register') }}">Register here</a></p>
 </body>
 </html>
