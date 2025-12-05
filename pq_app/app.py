@@ -8,18 +8,18 @@ from . import login_manager
 
 main_bp = Blueprint("main", __name__)
 
+
 @login_manager.user_loader
 def load_user(user_id):
     return model.User.query.get(int(user_id))
+
 
 @main_bp.route("/register", methods=["GET", "POST"])
 def register():
     form = gameforms.RegisterForm()
     if form.validate_on_submit():
         password = form.password.data or ""
-        hashed_password = generate_password_hash(
-            password, method="pbkdf2:sha256"
-        )
+        hashed_password = generate_password_hash(password, method="pbkdf2:sha256")
         new_user = model.User()
         new_user.username = form.username.data
         new_user.password_hash = hashed_password
@@ -28,6 +28,7 @@ def register():
         flash("Registration successful! Please log in.")
         return redirect(url_for("main.login"))  # <-- FIXED
     return render_template("register.html", form=form)
+
 
 @main_bp.route("/login", methods=["GET", "POST"])
 def login():
@@ -44,6 +45,7 @@ def login():
                 return render_template("login.html", form=form)
     return render_template("login.html", form=form)
 
+
 @main_bp.route("/logout")
 @login_required
 def logout():
@@ -51,15 +53,14 @@ def logout():
     flash("You have been logged out.")
     return redirect(url_for("main.login"))  # <-- FIXED
 
+
 @main_bp.route("/", methods=["POST", "GET"])
 # @login_required
 def greet_user():
     form = gameforms.UserNameForm()
     if request.method == "POST":
         if form.validate_on_submit():
-            new_user = (
-                model.User().query.filter_by(username=form.username.data).first()
-            )
+            new_user = model.User().query.filter_by(username=form.username.data).first()
             if new_user is not None:
                 return redirect(url_for("main.setup_char", player_id=new_user.id))  # <-- FIXED
             else:
@@ -75,22 +76,17 @@ def setup_char(player_id):
     user_profile_id = user_profile.id
     form = gameforms.CharacterForm(obj=user_profile)
     form.charclass.choices = [
-        (PlayerClass.id, PlayerClass.name)
-        for PlayerClass in model.PlayerClass.query.order_by("name")
+        (PlayerClass.id, PlayerClass.name) for PlayerClass in model.PlayerClass.query.order_by("name")
     ]
-    form.charrace.choices = [
-        (PlayerRace.id, PlayerRace.name)
-        for PlayerRace in model.PlayerRace.query.order_by("name")
-    ]
+    form.charrace.choices = [(PlayerRace.id, PlayerRace.name) for PlayerRace in model.PlayerRace.query.order_by("name")]
     tile_type_list = [
-            {"name": tile_type.name, "id": tile_type.id}
-            for tile_type in model.TileTypeOption.query.order_by("name")
-        ]
+        {"name": tile_type.name, "id": tile_type.id} for tile_type in model.TileTypeOption.query.order_by("name")
+    ]
     tile_type = random.choice(tile_type_list)
     if request.method == "POST":
         # TODO: pre-populate the form with the data from database
         form.populate_obj(user_profile)
-        
+
         # if no tile exists for this user, create a tile
         if not model.Tile.query.filter_by(user_id=user_profile_id).first():
             current_tile = model.Tile()
@@ -98,18 +94,17 @@ def setup_char(player_id):
             current_tile.type = tile_type["id"]
             model.db.session.add(current_tile)
         form = gameforms.TileForm()
-        form.type.data = tile_type['name']
+        form.type.data = tile_type["name"]
         user_profile.hitpoints = 100
         model.db.session.add(user_profile)
         model.db.session.commit()
         print("profile saved")
         return redirect(url_for("char_start", id=user_profile_id))
     elif request.method == "GET":
-        return render_template(
-            "charsetup.html", player_char=user_profile, form=form
-        )
+        return render_template("charsetup.html", player_char=user_profile, form=form)
     else:
         return {"Error": "Invalid request method"}
+
 
 @main_bp.route("/player/<int:id>/start", methods=["POST", "GET"])
 @login_required
@@ -117,26 +112,19 @@ def char_start(id):
     # TODO: query db to get user profile
     user_profile = model.User.query.get_or_404(id)
     char_message = "This is a test message to be displayed when the player first starts the game"
-    return render_template(
-        "charStart.html", charMessage=char_message, player_char_id=user_profile.id
-    )
+    return render_template("charStart.html", charMessage=char_message, player_char_id=user_profile.id)
 
-# route for the current tile, using a short url like /play that can be
-# easily accessed by a user that is logged in
+
 @main_bp.route("/player/<int:player_id>/play", methods=["GET"])
 @login_required
 def get_tile(player_id):
     tile_config = gameTile.pqGameTile()
     user_profile = model.User.query.get(player_id)
-    tile_details = (
-        model.Tile.query.filter_by(user_id=player_id)
-        .order_by(model.Tile.id.desc())
-        .first()
-    )
+    tile_details = model.Tile.query.filter_by(user_id=player_id).order_by(model.Tile.id.desc()).first()
     form = gameforms.TileForm(obj=tile_details)
     if tile_details is not None:
         form.tileid = tile_details.id
-        # set the form type data to the name value from the TileTypeOption table using tile_details.type as a foreign key 
+        # set the form type data to the name value from the TileTypeOption table using tile_details.type as a foreign key
         form.type.data = model.TileTypeOption.query.get(tile_details.type)
     else:
         form.tileid.data = ""
@@ -150,7 +138,7 @@ def get_tile(player_id):
         form.content.data = "This is a scene tile"
     if form.type.data == "treasure":
         form.content.data = "This is a treasure tile"
-    # if the tile_details exists check if action taken 
+    # if the tile_details exists check if action taken
     # if tile action_taken is not null, render the tile details in read only form
     if tile_details and tile_details.action_taken:
         # set the form action choices to the action option selected for this tile record
@@ -158,29 +146,21 @@ def get_tile(player_id):
             (action_option.id, action_option.name)
             for action_option in model.ActionOption.query.join(
                 model.Action, model.Action.actionverb == model.ActionOption.id
-            ).filter(
-                model.Action.tile == tile_details.id
-            ).order_by(
-                model.ActionOption.name
             )
+            .filter(model.Action.tile == tile_details.id)
+            .order_by(model.ActionOption.name)
         ]
         return render_template("gameTile.html", player_char=user_profile, form=form, readonly=True)
-    form.action.choices = [
-        (tileaction.id, tileaction.name)
-        for tileaction in model.ActionOption.query.order_by("name")
-    ]
+    form.action.choices = [(tileaction.id, tileaction.name) for tileaction in model.ActionOption.query.order_by("name")]
     return render_template("gameTile.html", player_char=user_profile, form=form)
+
 
 @main_bp.route("/player/<int:player_id>/game/tile/next", methods=["POST", "GET"])
 @login_required
 def generate_tile(player_id):
     user_profile = model.User.query.get_or_404(player_id)
     # get last tile record for the user
-    tile_record = (
-        model.Tile.query.filter_by(user_id=player_id)
-        .order_by(model.Tile.id.desc())
-        .first()
-    )
+    tile_record = model.Tile.query.filter_by(user_id=player_id).order_by(model.Tile.id.desc()).first()
     # if the tile has not been actioned redirect to that tile page
     if tile_record is not None and not tile_record.action_taken:
         return redirect(url_for("get_tile", player_id=player_id))
@@ -188,8 +168,7 @@ def generate_tile(player_id):
     tile_details = gameforms.TileForm()
     # get the tile type list
     tile_type_list = [
-        {"name": tile_type.name, "id": tile_type.id}
-        for tile_type in model.TileTypeOption.query.order_by("name")
+        {"name": tile_type.name, "id": tile_type.id} for tile_type in model.TileTypeOption.query.order_by("name")
     ]
     # generate a new tile object
     if not tile_details.action:
@@ -236,9 +215,7 @@ def execute_tile_action(playerid, tile_id):
         # validate actionID is in the list of valid actions table
         if not action_type_ID:
             return {"Error": "No action selected"}
-        action_record = model.Action.query.filter_by(
-            tile=tile_id, actionverb=action_type_ID
-        ).first()
+        action_record = model.Action.query.filter_by(tile=tile_id, actionverb=action_type_ID).first()
         if action_record:
             print(f"Action_record ID: {action_record.id}")
         if tile_record.action_taken == True:
@@ -266,6 +243,7 @@ def execute_tile_action(playerid, tile_id):
             "status_code": 402,
         }
 
+
 @main_bp.route("/player/<int:player_id>/profile", methods=["GET"])
 @login_required
 def get_user_profile(player_id):
@@ -276,21 +254,9 @@ def get_user_profile(player_id):
     return render_template("profile.html", player_char=user_profile)
 
 
-# get history
 @main_bp.route("/player/<int:player_id>/game/history", methods=["GET"])
 @login_required
 def get_history(player_id):
-    # get current logged in user profile
     user_profile = model.User.query.get(player_id)
     tile_history = model.Tile.query.filter_by(user_id=player_id).all()
     return render_template("gameHistory.html", player_char=user_profile, history=tile_history)
-
-from flask import Flask
-
-if __name__ == "__main__":
-    app = Flask(__name__)
-    with open("game_config.ini", "r") as fin:
-        config_json = json.load(fin)
-    tile_config = gameTile.pqGameTile()
-    # run the app with debuggin enabled
-    app.run(debug=True)
