@@ -1,4 +1,8 @@
-# tests/test_routes.py
+# # tests/test_routes.py
+# from pq_app import app
+# from config import TestingConfig
+
+# import pytest
 import pytest
 from werkzeug.security import generate_password_hash
 from pq_app.model import (
@@ -80,7 +84,6 @@ def test_register_post_success(client):
     )
     assert response.status_code == 200
     assert b"Login" in response.data
-
     # Verify user was created in database
     with client.application.app_context():
         user = User.query.filter_by(username="newuser").first()
@@ -95,7 +98,6 @@ def test_logout(client, setup_test_user):
         data={"username": "testuser", "password": "testpassword"},
         follow_redirects=True,
     )
-
     # Then logout
     response = client.get("/logout", follow_redirects=True)
     assert response.status_code == 200
@@ -116,7 +118,6 @@ def authenticated_user(client):
         data={"username": "authuser", "password": "password123"},
         follow_redirects=True,
     )
-
     return user_id
 
 
@@ -333,7 +334,6 @@ def test_execute_tile_action_unauthorized(client, user_with_character):
     """Test that users cannot execute actions on other users' tiles."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-
     response = client.post(
         f"/player/{user_id + 999}/game/tile/{tile_id}/action",
         data={"action": 1},
