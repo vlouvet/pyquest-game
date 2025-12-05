@@ -1,0 +1,285 @@
+/* PyQuest Game - Main Stylesheet */
+
+:root {
+    --primary-color: #4a5568;
+    --secondary-color: #2d3748;
+    --accent-color: #ed8936;
+    --success-color: #48bb78;
+    --danger-color: #f56565;
+    --bg-dark: #1a202c;
+    --bg-light: #2d3748;
+    --text-light: #e2e8f0;
+    --text-muted: #a0aec0;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-light);
+    line-height: 1.6;
+    min-height: 100vh;
+}
+
+/* Container */
+.content {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Navigation */
+nav {
+    background-color: var(--secondary-color);
+    border-bottom: 3px solid var(--accent-color);
+    padding: 1rem 0;
+    margin-bottom: 2rem;
+}
+
+nav ul {
+    list-style: none;
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+nav a {
+    color: var(--text-light);
+    text-decoration: none;
+    font-weight: 600;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+nav a:hover {
+    background-color: var(--accent-color);
+    color: var(--bg-dark);
+}
+
+/* Headers */
+h1, h2, h3 {
+    color: var(--accent-color);
+    margin-bottom: 1rem;
+}
+
+h1 {
+    font-size: 2.5rem;
+    text-align: center;
+    margin-top: 1rem;
+}
+
+/* Forms */
+form {
+    background-color: var(--bg-light);
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    margin: 2rem auto;
+    max-width: 500px;
+}
+
+form div, form p {
+    margin-bottom: 1.5rem;
+}
+
+label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--text-light);
+    font-weight: 500;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+select,
+textarea {
+    width: 100%;
+    padding: 0.75rem;
+    border: 2px solid var(--primary-color);
+    border-radius: 4px;
+    background-color: var(--bg-dark);
+    color: var(--text-light);
+    font-size: 1rem;
+    transition: border-color 0.3s ease;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="email"]:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--accent-color);
+}
+
+input[type="submit"],
+button {
+    background-color: var(--accent-color);
+    color: var(--bg-dark);
+    padding: 0.75rem 2rem;
+    border: none;
+    border-radius: 4px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+input[type="submit"]:hover,
+button:hover {
+    background-color: #dd6b20;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Tile Container */
+.tile-container {
+    background: var(--secondary-color);
+    border: 3px solid var(--accent-color);
+    padding: 2rem;
+    border-radius: 8px;
+    margin: 2rem 0;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+}
+
+.tile-content {
+    background: var(--bg-dark);
+    padding: 1.5rem;
+    border-radius: 4px;
+    margin: 1rem 0;
+    border-left: 4px solid var(--accent-color);
+}
+
+/* Character Profile */
+.profile-card {
+    background: var(--secondary-color);
+    padding: 2rem;
+    border-radius: 8px;
+    margin: 2rem 0;
+}
+
+.profile-card p {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--primary-color);
+}
+
+.profile-card p:last-child {
+    border-bottom: none;
+}
+
+/* Flash Messages */
+.flash-messages {
+    max-width: 900px;
+    margin: 1rem auto;
+    padding: 0 20px;
+}
+
+.flash {
+    padding: 1rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+    font-weight: 500;
+}
+
+.flash-success {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.flash-error {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+.flash-info {
+    background-color: var(--accent-color);
+    color: var(--bg-dark);
+}
+
+/* Tables */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 2rem 0;
+    background-color: var(--bg-light);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+table thead {
+    background-color: var(--secondary-color);
+}
+
+table th,
+table td {
+    padding: 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--primary-color);
+}
+
+table th {
+    color: var(--accent-color);
+    font-weight: 600;
+}
+
+table tr:hover {
+    background-color: var(--primary-color);
+}
+
+/* Links */
+a {
+    color: var(--accent-color);
+    text-decoration: none;
+    transition: color 0.3s ease;
+}
+
+a:hover {
+    color: #dd6b20;
+    text-decoration: underline;
+}
+
+/* Error messages */
+.error {
+    color: var(--danger-color);
+    font-size: 0.9rem;
+    margin-top: 0.25rem;
+}
+
+/* Readonly fields */
+input[readonly],
+select[disabled],
+textarea[readonly] {
+    background-color: var(--primary-color);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    nav ul {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    h1 {
+        font-size: 2rem;
+    }
+
+    form {
+        padding: 1.5rem;
+    }
+
+    .content {
+        padding: 10px;
+    }
+}

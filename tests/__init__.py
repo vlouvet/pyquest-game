@@ -1,13 +1,14 @@
 import pytest
-from pq_app import app, db
+from pq_app import create_app
+from pq_app.model import db
 
 @pytest.fixture
 def test_app():
     """Set up the Flask app for testing."""
-    app2 = app.create_app()
-    with app2.app_context():
+    app = create_app('testing')
+    with app.app_context():
         db.create_all()  # Create tables
-        yield app2
+        yield app
         db.session.remove()
         db.drop_all()  # Clean up the database after tests
 

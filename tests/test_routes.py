@@ -1,12 +1,8 @@
-# # tests/test_routes.py
-# from pq_app import app
-# from config import TestingConfig
-
-# import pytest
+# tests/test_routes.py
 import pytest
 from werkzeug.security import generate_password_hash
-from pq_app import create_app, db
-from pq_app.model import User
+from pq_app import create_app
+from pq_app.model import db, User
 
 
 def test_home_redirect(client):

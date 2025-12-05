@@ -9,12 +9,12 @@
 <body>
     <nav>
         <ul>
-            <li><a href="{{ url_for('greet_user') }}">Home</a></li>
+            <li><a href="{{ url_for('main.greet_user') }}">Home</a></li>
             {% if current_user.is_authenticated %}
-                <li><a href="{{ url_for('get_user_profile', player_id=current_user.id) }}">Profile</a></li>
-                <li><a href="{{ url_for('get_history', player_id=current_user.id) }}">History</a></li>
+                <li><a href="{{ url_for('main.get_user_profile', player_id=current_user.id) }}">Profile</a></li>
+                <li><a href="{{ url_for('main.get_history', player_id=current_user.id) }}">History</a></li>
             {% else %}
-                <li><a href="{{ url_for('login') }}">Login</a></li>
+                <li><a href="{{ url_for('main.login') }}">Login</a></li>
             {% endif %}
         </ul>
     </nav>

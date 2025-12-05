@@ -1,17 +1,22 @@
-#testapp.py
+# test_app.py
 import pytest
-from pq_app import app as pq
+from pq_app import create_app
 from bs4 import BeautifulSoup
 from flask import url_for
 from pq_app.model import db, User, Tile, TileTypeOption
 
+
 @pytest.fixture()
 def app():
-    app = pq.create_app()
-    app.config.update({
-        "TESTING": True,
-        "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:"
-    })
+    """Create and configure a test app instance."""
+    app = create_app("testing")
+    app.config.update(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+            "WTF_CSRF_ENABLED": False,
+        }
+    )
 
     with app.app_context():
         db.create_all()
@@ -19,14 +24,17 @@ def app():
         db.session.remove()
         db.drop_all()
 
+
 @pytest.fixture()
 def client(app):
     return app.test_client()
 
+
 @pytest.fixture()
 def init_database(app):
     with app.app_context():
-        user = User(username="testuser", password_hash="testpassword")
+        user = User(username="testuser")
+        user.set_password("testpassword")
         db.session.add(user)
         db.session.commit()
 
@@ -40,11 +48,15 @@ def init_database(app):
 
         yield db
 
+
 def test_get_play(client):
+    """Test that the home route requires authentication."""
     response = client.get("/")
-    assert response.data != None
+    # Should redirect to login since user is not authenticated
+    assert response.status_code == 302
+    assert b"/login" in response.data or "/login" in response.location
+
 
 @pytest.fixture()
 def runner(app):
     return app.test_cli_runner()
-
