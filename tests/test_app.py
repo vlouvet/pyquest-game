@@ -37,15 +37,12 @@ def init_database(app):
         user.set_password("testpassword")
         db.session.add(user)
         db.session.commit()
-
         tile_type = TileTypeOption(name="test_tile")
         db.session.add(tile_type)
         db.session.commit()
-
         tile = Tile(user_id=user.id, type=tile_type.id)
         db.session.add(tile)
         db.session.commit()
-
         yield db
 
 
