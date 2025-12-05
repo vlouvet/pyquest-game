@@ -4,6 +4,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 db = SQLAlchemy()
 
+
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
@@ -14,10 +15,22 @@ class User(db.Model, UserMixin):
     playerclass = db.Column(db.Integer, db.ForeignKey("playerclass.id"))
     playerrace = db.Column(db.Integer, db.ForeignKey("playerrace.id"))
 
+    def __init__(
+        self, username=None, password_hash=None, email=None, hitpoints=None, playerclass=None, playerrace=None
+    ):
+        self.username = username
+        self.password_hash = password_hash
+        self.email = email
+        self.hitpoints = hitpoints
+        self.playerclass = playerclass
+        self.playerrace = playerrace
+
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
+        if self.password_hash is None:
+            return False
         return check_password_hash(self.password_hash, password)
 
 
@@ -28,6 +41,13 @@ class Tile(db.Model):
     action = db.Column(db.Integer, db.ForeignKey("action.id"))
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
     content = db.Column(db.String)
+
+    def __init__(self, user_id=None, type=None, action=None, content=None, action_taken=False):
+        self.user_id = user_id
+        self.type = type
+        self.action = action
+        self.content = content
+        self.action_taken = action_taken
 
 
 class Action(db.Model):
@@ -47,6 +67,9 @@ class TileTypeOption(db.Model):
     __tablename__ = "tiletypeoption"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
+
+    def __init__(self, name=None):
+        self.name = name
 
 
 class PlayerClass(db.Model):
@@ -72,7 +95,7 @@ def init_defaults():
         ]
         for act_opt in action_options:
             current_act_opt = ActionOption()
-            current_act_opt.name=act_opt["name"]
+            current_act_opt.name = act_opt["name"]
             db.session.add(current_act_opt)
         db.session.commit()
     if TileTypeOption.query.first() is None:
@@ -84,21 +107,21 @@ def init_defaults():
         ]
         for tile_type in tile_types:
             current_tile_type = TileTypeOption()
-            current_tile_type.name=tile_type["name"]
+            current_tile_type.name = tile_type["name"]
             db.session.add(current_tile_type)
         db.session.commit()
     if PlayerClass.query.first() is None:
         tile_types = [{"name": "witch"}, {"name": "fighter"}, {"name": "healer"}]
         for tile_type in tile_types:
             current_tile_type = PlayerClass()
-            current_tile_type.name=tile_type["name"]
+            current_tile_type.name = tile_type["name"]
             db.session.add(current_tile_type)
         db.session.commit()
     if PlayerRace.query.first() is None:
         tile_types = [{"name": "Human"}, {"name": "Elf"}, {"name": "Pandarian"}]
         for tile_type in tile_types:
             current_tile_type = PlayerRace()
-            current_tile_type.name=tile_type["name"]
+            current_tile_type.name = tile_type["name"]
             db.session.add(current_tile_type)
         db.session.commit()
 
