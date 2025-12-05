@@ -1,8 +1,4 @@
-# # tests/test_routes.py
-# from pq_app import app
-# from config import TestingConfig
-
-# import pytest
+# tests/test_routes.py
 import pytest
 from werkzeug.security import generate_password_hash
 from pq_app.model import (
