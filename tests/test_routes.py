@@ -122,24 +122,24 @@ def setup_game_data(client):
     with client.application.app_context():
         # Add PlayerClass
         if not PlayerClass.query.first():
-            warrior = PlayerClass(name="Warrior", description="Strong fighter")
-            mage = PlayerClass(name="Mage", description="Magic user")
+            warrior = PlayerClass(name="Warrior")
+            mage = PlayerClass(name="Mage")
             db.session.add(warrior)
             db.session.add(mage)
         
         # Add PlayerRace
         if not PlayerRace.query.first():
-            human = PlayerRace(name="Human", description="Standard race")
-            elf = PlayerRace(name="Elf", description="Magical race")
+            human = PlayerRace(name="Human")
+            elf = PlayerRace(name="Elf")
             db.session.add(human)
             db.session.add(elf)
         
         # Add TileTypeOption
         if not TileTypeOption.query.first():
-            sign = TileTypeOption(name="sign", description="A signpost")
-            monster = TileTypeOption(name="monster", description="A monster encounter")
-            scene = TileTypeOption(name="scene", description="A scene")
-            treasure = TileTypeOption(name="treasure", description="Treasure")
+            sign = TileTypeOption(name="sign")
+            monster = TileTypeOption(name="monster")
+            scene = TileTypeOption(name="scene")
+            treasure = TileTypeOption(name="treasure")
             db.session.add(sign)
             db.session.add(monster)
             db.session.add(scene)
@@ -147,9 +147,9 @@ def setup_game_data(client):
         
         # Add ActionOption
         if not ActionOption.query.first():
-            rest = ActionOption(name="Rest", description="Rest to recover")
-            explore = ActionOption(name="Explore", description="Explore area")
-            fight = ActionOption(name="Fight", description="Fight monster")
+            rest = ActionOption(name="Rest")
+            explore = ActionOption(name="Explore")
+            fight = ActionOption(name="Fight")
             db.session.add(rest)
             db.session.add(explore)
             db.session.add(fight)

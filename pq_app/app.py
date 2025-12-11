@@ -96,8 +96,9 @@ def setup_char(player_id):
     ]
     tile_type = random.choice(tile_type_list)
     if request.method == "POST":
-        # TODO: pre-populate the form with the data from database
-        form.populate_obj(user_profile)
+        # Manually set playerclass and playerrace from form data
+        user_profile.playerclass = form.charclass.data
+        user_profile.playerrace = form.charrace.data
         
         # if no tile exists for this user, create a tile
         if not model.Tile.query.filter_by(user_id=user_profile_id).first():
@@ -245,10 +246,8 @@ def execute_tile_action(playerid, tile_id):
         abort(403)
     
     tile_record = model.Tile.query.get(tile_id)
-    # populate the tileForm object with the tile record
-    tileForm = gameforms.TileForm()
-    tileForm.populate_obj(tile_record)
-    action_type_ID = tileForm.data.get("action")
+    # Get action from request form data
+    action_type_ID = request.form.get("action", type=int)
     if request.method == "POST":
         # validate actionID is in the list of valid actions table
         if not action_type_ID:

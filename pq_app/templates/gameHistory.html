@@ -23,5 +23,5 @@
         {% endfor %}
     </tbody>
 </table>
-<a href="{{ url_for('get_tile', player_id=player_char.id) }}">Back to Game</a>
+<a href="{{ url_for('main.get_tile', player_id=player_char.id) }}">Back to Game</a>
 {% endblock %}
