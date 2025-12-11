@@ -121,7 +121,6 @@ def setup_char(player_id):
             current_tile.user_id = user_profile_id
             current_tile.type = tile_type["id"]
             current_tile.playthrough_id = new_play.id
-
             # Generate and save content to database based on tile type
             tile_config = gameTile.pqGameTile()
             if tile_type["name"] == "sign":
@@ -133,7 +132,6 @@ def setup_char(player_id):
                 current_tile.content = "This is a scene tile"
             elif tile_type["name"] == "treasure":
                 current_tile.content = "This is a treasure tile"
-
             model.db.session.add(current_tile)
         form = gameforms.TileForm()
         form.type.data = tile_type["name"]
@@ -235,7 +233,6 @@ def get_tile(player_id):
             .order_by(model.ActionOption.name)
         ]
         return render_template("gameTile.html", player_char=user_profile, form=form, readonly=True)
-
     # Filter available actions based on tile type
     all_actions = model.ActionOption.query.order_by(model.ActionOption.name).all()
     if form.type.data == "sign":
@@ -291,7 +288,6 @@ def generate_tile(player_id):
     tile_config = gameTile.pqGameTile()
     tile_type_obj = model.db.session.get(model.TileTypeOption, current_tile.type)
     tile_type_name = tile_type_obj.name if tile_type_obj else None
-
     if tile_type_name == "sign":
         current_tile.content = tile_config.generate_signpost()
     elif tile_type_name == "monster":
@@ -312,7 +308,6 @@ def generate_tile(player_id):
     tile_details.tileid.data = str(current_tile.id)
     tile_details.type.data = tile_type_name
     tile_details.content.data = current_tile.content
-
     # Filter available actions based on tile type (same as get_tile)
     all_actions = model.ActionOption.query.order_by(model.ActionOption.name).all()
     if tile_details.type.data == "sign":
@@ -372,7 +367,6 @@ def start_journey(player_id):
         current_tile.content = "This is a scene tile"
     elif tile_type_name == "treasure":
         current_tile.content = "This is a treasure tile"
-
     model.db.session.add(current_tile)
     model.db.session.commit()
 
@@ -449,7 +443,6 @@ def execute_tile_action(playerid, tile_id):
         action_result = None
         tile_type = model.db.session.get(model.TileTypeOption, tile_record.type)
         tile_type_name = tile_type.name if tile_type else None
-
         if action_name == "rest":
             # Check if resting on a monster tile
             if tile_type_name == "monster":
