@@ -2,6 +2,7 @@ import pytest
 from pq_app import create_app
 from pq_app.model import db
 
+
 @pytest.fixture
 def test_app():
     """Set up the Flask app for testing."""

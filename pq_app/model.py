@@ -131,9 +131,6 @@ class ActionOption(Model):
     def __init__(self, name=None):
         self.name = name
 
-    def __repr__(self):
-        return f"<ActionOption {self.name}>"
-
 
 class TileTypeOption(Model):
     __tablename__ = "tiletypeoption"
