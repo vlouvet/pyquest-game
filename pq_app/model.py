@@ -2,8 +2,21 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timezone
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
+import sqlite3
 
 db = SQLAlchemy()
+
+
+# Ensure SQLite enforces foreign key constraints when used as the runtime database.
+@event.listens_for(Engine, "connect")
+def _set_sqlite_pragma(dbapi_connection, connection_record):
+    # Only apply for sqlite connections
+    if isinstance(dbapi_connection, sqlite3.Connection):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 
 # Provide a concrete Model reference to satisfy static analyzers
@@ -48,16 +61,6 @@ class User(Model, UserMixin):
         self.playerclass = playerclass
         self.playerrace = playerrace
 
-    def __init__(
-        self, username=None, password_hash=None, email=None, hitpoints=None, playerclass=None, playerrace=None
-    ):
-        self.username = username
-        self.password_hash = password_hash
-        self.email = email
-        self.hitpoints = hitpoints
-        self.playerclass = playerclass
-        self.playerrace = playerrace
-
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
@@ -87,19 +90,22 @@ class Tile(Model):
     type = db.Column(db.Integer, db.ForeignKey("tiletypeoption.id"), nullable=False)
     action = db.Column(db.Integer, db.ForeignKey("action.id"))
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    playthrough_id = db.Column(db.Integer, db.ForeignKey("playthrough.id"), nullable=True)
     content = db.Column(db.String)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships - specify foreign_keys to resolve ambiguity
     tile_type = db.relationship("TileTypeOption", foreign_keys=[type], backref="tiles")
     tile_action = db.relationship("Action", foreign_keys=[action], backref="tiles")
+    playthrough = db.relationship("Playthrough", foreign_keys=[playthrough_id], backref="tiles")
 
-    def __init__(self, user_id=None, type=None, action=None, content=None, action_taken=False):
+    def __init__(self, user_id=None, type=None, action=None, content=None, action_taken=False, playthrough_id=None):
         self.user_id = user_id
         self.type = type
         self.action = action
         self.content = content
         self.action_taken = action_taken
+        self.playthrough_id = playthrough_id
 
 
 class Action(Model):
@@ -151,6 +157,20 @@ class PlayerRace(Model):
 
     def __repr__(self):
         return f"<PlayerRace {self.name}>"
+
+
+class Playthrough(Model):
+    __tablename__ = "playthrough"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    started_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    ended_at = db.Column(db.DateTime, nullable=True)
+
+    # relationship back to user and tiles
+    user = db.relationship("User", backref="playthroughs")
+
+    def __init__(self, user_id=None):
+        self.user_id = user_id
 
 
 def init_defaults():

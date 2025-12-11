@@ -15,12 +15,16 @@
         {% for tile in history %}
         <tr>
             <td>{{ tile.id }}</td>
-            <td>{{ tile.type }}</td>
-            <td>{{ tile.action }}</td>
+            <td>{{ tile.tile_type.name if tile.tile_type else 'N/A' }}</td>
+            <td>{{ tile.tile_action.name if tile.tile_action else 'N/A' }}</td>
             <td>{{ tile.content }}</td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
+{% if active_playthrough %}
 <a href="{{ url_for('main.get_tile', player_id=player_char.id) }}">Back to Game</a>
+{% else %}
+<a href="{{ url_for('main.greet_user') }}">Start New Journey</a>
+{% endif %}
 {% endblock %}

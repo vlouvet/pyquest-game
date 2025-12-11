@@ -1,11 +1,14 @@
-version: '3.7'
-
 services:
   flask-app:
-    mem_limit: 256m  # Set the memory limit to 512 megabytes
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: .
+    environment:
+      DATABASE_URL: sqlite:////data/pyquest.db
+      FLASK_ENV: development
+    volumes:
+      - ./instance:/data   # persist sqlite db on host for dev
+    ports:
+      - "5000:5000"
+    command: ["flask", "run", "--host=0.0.0.0"]
 
   nginx-app:
     image: nginx

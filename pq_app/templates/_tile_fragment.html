@@ -1,0 +1,17 @@
+<div id="tile-mount">
+    <h1>PyQuest Game</h1>
+    <h2>Tile # {{ form.tileid.data }}</h2>
+    <form id="tile-form-inner" action="/player/{{ player_char.id }}/game/tile/next" method="post">
+        {{ form.csrf_token }}
+        <div>{{ form.type.label }}: {{ form.type }}</div>
+        <div>{{ form.content.label }}: {{ form.content }}</div>
+        <div>{{ form.action.label }}: {{ form.action }}</div>
+
+        <button id="take-action" type="submit" formaction="/player/{{ player_char.id }}/game/tile/{{ form.tileid.data }}/action">Take Action</button>
+        <input type="submit" value="Proceed to Next Tile">
+    </form>
+
+    {% if action_result %}
+        <div class="action-result"><strong>Result:</strong> {{ action_result }}</div>
+    {% endif %}
+</div>

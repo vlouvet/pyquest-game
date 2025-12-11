@@ -15,13 +15,23 @@ branch_labels = None
 
 
 def upgrade():
-    # Add nullable 'code' column
-    op.add_column("actionoption", sa.Column("code", sa.String(), nullable=True))
-    # Backfill codes based on name
+    # Add nullable 'code' column if it doesn't already exist (idempotent for existing DBs)
     conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    cols = [c['name'] for c in inspector.get_columns('actionoption')] if inspector.has_table('actionoption') else []
+    if 'code' not in cols:
+        try:
+            op.add_column("actionoption", sa.Column("code", sa.String(), nullable=True))
+        except Exception:
+            # In case of race conditions or concurrent migrations the column
+            # may have been added after our check; ignore duplicate-column errors.
+            pass
+    # Backfill codes based on name (safe to run even if column exists)
     conn.execute(sa.text("UPDATE actionoption SET code = name WHERE code IS NULL"))
-    # Create unique index on code
-    op.create_index(op.f("ix_actionoption_code"), "actionoption", ["code"], unique=True)
+    # Create unique index on code if it doesn't exist
+    indexes = [ix['name'] for ix in inspector.get_indexes('actionoption')]
+    if op.f("ix_actionoption_code") not in indexes:
+        op.create_index(op.f("ix_actionoption_code"), "actionoption", ["code"], unique=True)
 
 
 def downgrade():

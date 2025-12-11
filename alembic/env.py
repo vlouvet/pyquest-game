@@ -2,7 +2,9 @@ from logging.config import fileConfig
 import os
 import sys
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, event
+from sqlalchemy.engine import Engine
+import sqlite3
 
 # ensure repo root on path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -46,6 +48,13 @@ def run_migrations_online():
 
         with context.begin_transaction():
             context.run_migrations()
+
+@event.listens_for(Engine, "connect")
+def _set_sqlite_pragma(dbapi_conn, connection_record):
+    if isinstance(dbapi_conn, sqlite3.Connection):  # only for sqlite
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 
 if context.is_offline_mode():

@@ -15,9 +15,13 @@ branch_labels = None
 
 def upgrade():
     # Ensure no NULL codes remain (previous migration backfilled code = name)
-    # Then alter the column to be non-nullable
-    op.alter_column('actionoption', 'code', existing_type=sa.String(), nullable=False)
+    # Then alter the column to be non-nullable. Use batch mode for all dialects
+    # to ensure SQLite compatibility (it will recreate the table).
+    with op.batch_alter_table('actionoption') as batch_op:
+        batch_op.alter_column('code', existing_type=sa.String(), nullable=False)
 
 
 def downgrade():
-    op.alter_column('actionoption', 'code', existing_type=sa.String(), nullable=True)
+    # Revert the NOT NULL change using batch mode to support SQLite.
+    with op.batch_alter_table('actionoption') as batch_op:
+        batch_op.alter_column('code', existing_type=sa.String(), nullable=True)

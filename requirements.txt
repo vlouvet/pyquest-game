@@ -7,3 +7,6 @@ wtforms
 bs4
 python-dotenv
 Flask-Migrate
+psycopg2-binary
+alembic
+gunicorn

@@ -5,34 +5,80 @@
 {% block content %}
     <h1>PyQuest Game</h1>
     <h2>Tile # {{form.tileid}}</h2>
-    <form id="tile-form" action="/player/{{player_char.id}}/game/tile/next" method="post">
-        {{ form.csrf_token }}
-        <div>{{ form.type.label }}: {{ form.type }}</div>
-        <div>{{ form.content.label }}: {{ form.content }}</div>
-        <div>{{ form.action.label }}: {{ form.action }}</div>
+    <div id="tile-mount">
+        <form id="tile-form" action="/player/{{player_char.id}}/game/tile/next" method="post">
+            {{ form.csrf_token }}
+            <div>{{ form.type.label }}: {{ form.type }}</div>
+            <div>{{ form.content.label }}: {{ form.content }}</div>
+            <div>{{ form.action.label }}: {{ form.action }}</div>
 
-        <button id="take-action" type="submit" formaction="/player/{{player_char.id}}/game/tile/{{ form.tileid.data if form.tileid else form.tileid }}/action">Take Action</button>
-        <input type="submit" value="Proceed to Next Tile">
-    </form>
+            <button id="take-action" type="submit" formaction="/player/{{player_char.id}}/game/tile/{{ form.tileid.data }}/action">Take Action</button>
+            <input type="submit" value="Proceed to Next Tile">
+        </form>
 
-    {% if action_result %}
-        {% include "_action_result.html" %}
-    {% endif %}
+        <div id="action-feedback" style="margin:10px 0; color:#b22; display:none"></div>
+
+        {% if action_result %}
+            {% include "_action_result.html" %}
+        {% endif %}
+    </div>
 
     <script>
     (function(){
         var form = document.getElementById('tile-form');
         var takeBtn = document.getElementById('take-action');
+        var feedback = document.getElementById('action-feedback');
         if (!form || !takeBtn) return;
+
+        function showFeedback(msg, isError){
+            feedback.textContent = msg;
+            feedback.style.color = isError ? '#b22' : '#080';
+            feedback.style.display = 'block';
+            if (!isError) setTimeout(function(){ feedback.style.display = 'none'; }, 4000);
+        }
+
         takeBtn.addEventListener('click', function(e){
+            e.preventDefault();
+
             var select = form.querySelector('select[name="action"]');
-            if (!select) return;
-            var val = select.value;
-            if (val === 'quit') {
-                if (!confirm('Are you sure you want to quit this adventure?')) {
-                    e.preventDefault();
-                }
+            if (select && select.value === 'quit' && !confirm('Are you sure you want to quit this adventure?')) {
+                return;
             }
+
+            if (takeBtn.dataset.sending === '1') return;
+            takeBtn.dataset.sending = '1';
+            takeBtn.disabled = true;
+
+            var actionUrl = takeBtn.getAttribute('formaction') || form.action;
+            var fd = new FormData(form);
+
+            fetch(actionUrl, {
+                method: 'POST',
+                body: fd,
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                credentials: 'same-origin'
+            }).then(function(resp){
+                return resp.json().then(function(data){
+                    if (!resp.ok) throw data;
+                    return data;
+                });
+            }).then(function(data){
+                if (data.redirect) {
+                    window.location = data.redirect;
+                    return;
+                }
+                if (data.action_result) showFeedback(data.action_result, false);
+                if (data.tile_html) {
+                    var mount = document.getElementById('tile-mount');
+                    if (mount) mount.innerHTML = data.tile_html;
+                }
+            }).catch(function(err){
+                var msg = (err && err.error) || (err && err.message) || 'Unexpected server error';
+                showFeedback(msg, true);
+            }).finally(function(){
+                takeBtn.dataset.sending = '0';
+                takeBtn.disabled = false;
+            });
         }, false);
     })();
     </script>

@@ -18,6 +18,13 @@ def upgrade():
     # Use reflection to find any FK constraints on 'action' that reference 'tile', drop them,
     # then create a new FK with ON DELETE CASCADE.
     conn = op.get_bind()
+    # SQLite does not support altering constraints; use batch mode to recreate the table
+    dialect_name = getattr(conn.dialect, 'name', '') or ''
+    if dialect_name.startswith('sqlite'):
+        with op.batch_alter_table('action', recreate='always') as batch_op:
+            batch_op.create_foreign_key('fk_action_tile_tile', 'tile', ['tile'], ['id'], ondelete='CASCADE')
+        return
+
     inspector = Inspector.from_engine(conn)
     fks = inspector.get_foreign_keys('action')
     for fk in fks:
@@ -38,6 +45,16 @@ def upgrade():
 
 def downgrade():
     # Drop the cascade FK and recreate without ondelete (best-effort)
+    conn = op.get_bind()
+    if conn.dialect.name == 'sqlite':
+        with op.batch_alter_table('action', recreate='always') as batch_op:
+            # recreate table without ondelete
+            try:
+                batch_op.drop_constraint('fk_action_tile_tile', type_='foreignkey')
+            except Exception:
+                pass
+        return
+
     try:
         op.drop_constraint('fk_action_tile_tile', 'action', type_='foreignkey')
     except Exception:
