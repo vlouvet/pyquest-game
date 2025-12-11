@@ -94,18 +94,46 @@ class Tile(Model):
     content = db.Column(db.String)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
+    # Monster combat tracking (for monster tiles)
+    monster_max_hp = db.Column(db.Integer, nullable=True)  # Monster's maximum HP
+    monster_current_hp = db.Column(db.Integer, nullable=True)  # Monster's current HP (null for non-monster tiles)
+
     # Relationships - specify foreign_keys to resolve ambiguity
     tile_type = db.relationship("TileTypeOption", foreign_keys=[type], backref="tiles")
     tile_action = db.relationship("Action", foreign_keys=[action], backref="tiles")
     playthrough = db.relationship("Playthrough", foreign_keys=[playthrough_id], backref="tiles")
 
-    def __init__(self, user_id=None, type=None, action=None, content=None, action_taken=False, playthrough_id=None):
+    def __init__(
+        self,
+        user_id=None,
+        type=None,
+        action=None,
+        content=None,
+        action_taken=False,
+        playthrough_id=None,
+        monster_max_hp=None,
+        monster_current_hp=None,
+    ):
         self.user_id = user_id
         self.type = type
         self.action = action
         self.content = content
         self.action_taken = action_taken
         self.playthrough_id = playthrough_id
+        self.monster_max_hp = monster_max_hp
+        self.monster_current_hp = monster_current_hp
+
+    @property
+    def is_monster_alive(self) -> bool:
+        """Check if the monster on this tile is still alive"""
+        return self.monster_current_hp is not None and self.monster_current_hp > 0
+
+    @property
+    def monster_hp_percent(self) -> float:
+        """Get monster HP as a percentage (0.0 to 1.0)"""
+        if self.monster_max_hp and self.monster_current_hp is not None:
+            return max(0.0, min(1.0, self.monster_current_hp / self.monster_max_hp))
+        return 0.0
 
 
 class Action(Model):
@@ -181,6 +209,7 @@ class CombatAction(Model):
     Examples: attack_light, attack_heavy, defend, heal, flee, special_ability
     These extend beyond basic ActionOption to provide detailed combat mechanics.
     """
+
     __tablename__ = "combataction"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
@@ -199,8 +228,19 @@ class CombatAction(Model):
     required_class = db.relationship("PlayerClass", foreign_keys=[requires_class])
     required_race = db.relationship("PlayerRace", foreign_keys=[requires_race])
 
-    def __init__(self, name=None, code=None, description=None, damage_min=0, damage_max=0, 
-                 heal_amount=0, defense_boost=0, requires_class=None, requires_race=None, success_rate=100):
+    def __init__(
+        self,
+        name=None,
+        code=None,
+        description=None,
+        damage_min=0,
+        damage_max=0,
+        heal_amount=0,
+        defense_boost=0,
+        requires_class=None,
+        requires_race=None,
+        success_rate=100,
+    ):
         self.name = name
         self.code = code
         self.description = description
@@ -218,6 +258,7 @@ class Encounter(Model):
     Tracks combat encounters between players and monsters.
     Records detailed combat history including multiple combat actions within a single tile.
     """
+
     __tablename__ = "encounter"
     id = db.Column(db.Integer, primary_key=True)
     tile_id = db.Column(db.Integer, db.ForeignKey("tile.id", ondelete="CASCADE"), nullable=False)
@@ -238,9 +279,20 @@ class Encounter(Model):
     user = db.relationship("User", backref="encounters")
     combat_action = db.relationship("CombatAction", backref="encounters")
 
-    def __init__(self, tile_id=None, user_id=None, combat_action_id=None, 
-                 player_hp_before=0, player_hp_after=0, monster_hp_before=None, monster_hp_after=None,
-                 damage_dealt=0, damage_received=0, was_successful=True, result_message=None):
+    def __init__(
+        self,
+        tile_id=None,
+        user_id=None,
+        combat_action_id=None,
+        player_hp_before=0,
+        player_hp_after=0,
+        monster_hp_before=None,
+        monster_hp_after=None,
+        damage_dealt=0,
+        damage_received=0,
+        was_successful=True,
+        result_message=None,
+    ):
         self.tile_id = tile_id
         self.user_id = user_id
         self.combat_action_id = combat_action_id
@@ -259,6 +311,7 @@ class TileMedia(Model):
     Media assets (images, ASCII art) associated with tiles or tile types.
     Allows multiple media items per tile type and supports future image uploads.
     """
+
     __tablename__ = "tilemedia"
     id = db.Column(db.Integer, primary_key=True)
     tile_type_id = db.Column(db.Integer, db.ForeignKey("tiletypeoption.id"), nullable=True)
@@ -274,8 +327,16 @@ class TileMedia(Model):
     tile_type = db.relationship("TileTypeOption", backref="media")
     tile = db.relationship("Tile", backref="media")
 
-    def __init__(self, tile_type_id=None, tile_id=None, media_type=None, content=None, 
-                 url=None, is_default=False, display_order=0):
+    def __init__(
+        self,
+        tile_type_id=None,
+        tile_id=None,
+        media_type=None,
+        content=None,
+        url=None,
+        is_default=False,
+        display_order=0,
+    ):
         self.tile_type_id = tile_type_id
         self.tile_id = tile_id
         self.media_type = media_type
@@ -300,7 +361,7 @@ def init_defaults():
             current_act_opt.code = act_opt.get("code")
             db.session.add(current_act_opt)
         db.session.commit()
-    
+
     if TileTypeOption.query.first() is None:
         tile_types = [
             {"name": "scene"},
@@ -313,7 +374,7 @@ def init_defaults():
             current_tile_type.name = tile_type["name"]
             db.session.add(current_tile_type)
         db.session.commit()
-    
+
     if PlayerClass.query.first() is None:
         player_classes = [{"name": "witch"}, {"name": "fighter"}, {"name": "healer"}]
         for pc in player_classes:
@@ -321,7 +382,7 @@ def init_defaults():
             current_class.name = pc["name"]
             db.session.add(current_class)
         db.session.commit()
-    
+
     if PlayerRace.query.first() is None:
         player_races = [{"name": "Human"}, {"name": "Elf"}, {"name": "Pandarian"}]
         for pr in player_races:
@@ -329,7 +390,7 @@ def init_defaults():
             current_race.name = pr["name"]
             db.session.add(current_race)
         db.session.commit()
-    
+
     # Seed CombatAction data for enhanced combat system
     if CombatAction.query.first() is None:
         combat_actions = [
@@ -340,7 +401,7 @@ def init_defaults():
                 "description": "A quick, nimble strike with lower damage but higher accuracy",
                 "damage_min": 3,
                 "damage_max": 8,
-                "success_rate": 95
+                "success_rate": 95,
             },
             {
                 "name": "Heavy Attack",
@@ -348,28 +409,23 @@ def init_defaults():
                 "description": "A powerful strike that deals more damage but may miss",
                 "damage_min": 8,
                 "damage_max": 15,
-                "success_rate": 75
+                "success_rate": 75,
             },
             {
                 "name": "Defend",
                 "code": "defend",
                 "description": "Take a defensive stance, reducing incoming damage",
                 "defense_boost": 5,
-                "success_rate": 100
+                "success_rate": 100,
             },
             {
                 "name": "Heal",
                 "code": "heal",
                 "description": "Restore health using basic first aid",
                 "heal_amount": 15,
-                "success_rate": 100
+                "success_rate": 100,
             },
-            {
-                "name": "Flee",
-                "code": "flee",
-                "description": "Attempt to escape from combat",
-                "success_rate": 60
-            },
+            {"name": "Flee", "code": "flee", "description": "Attempt to escape from combat", "success_rate": 60},
             # Class-specific actions (will need class IDs after PlayerClass seeding)
             {
                 "name": "Fireball",
@@ -378,7 +434,7 @@ def init_defaults():
                 "damage_min": 12,
                 "damage_max": 20,
                 "success_rate": 85,
-                "requires_class": "witch"  # Will be converted to ID
+                "requires_class": "witch",  # Will be converted to ID
             },
             {
                 "name": "Power Strike",
@@ -387,7 +443,7 @@ def init_defaults():
                 "damage_min": 15,
                 "damage_max": 25,
                 "success_rate": 80,
-                "requires_class": "fighter"
+                "requires_class": "fighter",
             },
             {
                 "name": "Divine Heal",
@@ -395,7 +451,7 @@ def init_defaults():
                 "description": "Channel divine energy to restore significant health (Healer only)",
                 "heal_amount": 30,
                 "success_rate": 100,
-                "requires_class": "healer"
+                "requires_class": "healer",
             },
             # Race-specific actions
             {
@@ -406,7 +462,7 @@ def init_defaults():
                 "damage_max": 12,
                 "defense_boost": 3,
                 "success_rate": 90,
-                "requires_race": "elf"
+                "requires_race": "elf",
             },
             {
                 "name": "Pandarian Calm",
@@ -415,14 +471,14 @@ def init_defaults():
                 "heal_amount": 10,
                 "defense_boost": 4,
                 "success_rate": 100,
-                "requires_race": "pandarian"
+                "requires_race": "pandarian",
             },
         ]
-        
+
         # Get class and race IDs for foreign key references
         class_map = {pc.name.lower(): pc.id for pc in PlayerClass.query.all()}
         race_map = {pr.name.lower(): pr.id for pr in PlayerRace.query.all()}
-        
+
         for action_data in combat_actions:
             combat_action = CombatAction()
             combat_action.name = action_data["name"]
@@ -433,15 +489,15 @@ def init_defaults():
             combat_action.heal_amount = action_data.get("heal_amount", 0)
             combat_action.defense_boost = action_data.get("defense_boost", 0)
             combat_action.success_rate = action_data.get("success_rate", 100)
-            
+
             # Convert class/race names to IDs
             if "requires_class" in action_data:
                 combat_action.requires_class = class_map.get(action_data["requires_class"])
             if "requires_race" in action_data:
                 combat_action.requires_race = race_map.get(action_data["requires_race"])
-            
+
             db.session.add(combat_action)
-        
+
         db.session.commit()
 
 
