@@ -10,3 +10,8 @@ Flask-Migrate
 psycopg2-binary
 alembic
 gunicorn
+flask-jwt-extended
+marshmallow
+flask-swagger-ui
+pyyaml
+flask-limiter

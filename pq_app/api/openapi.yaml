@@ -1,0 +1,779 @@
+openapi: 3.0.0
+info:
+  title: PyQuest API
+  description: RESTful API for PyQuest game - mobile and external client access
+  version: 1.0.0
+  contact:
+    name: PyQuest Team
+    email: support@pyquest.com
+
+servers:
+  - url: http://localhost:5000/api/v1
+    description: Development server
+  - url: https://api.pyquest.com/api/v1
+    description: Production server
+
+tags:
+  - name: Authentication
+    description: User registration and login
+  - name: Player
+    description: Player character management
+  - name: Tiles
+    description: Tile navigation and actions
+  - name: Combat
+    description: Combat actions and encounters
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Bad Request"
+        message:
+          type: string
+          example: "Invalid input provided"
+        status_code:
+          type: integer
+          example: 400
+    
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        username:
+          type: string
+          example: "player123"
+        email:
+          type: string
+          format: email
+          example: "player@example.com"
+        created_at:
+          type: string
+          format: date-time
+    
+    PlayerCharacter:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        user_id:
+          type: integer
+          example: 1
+        char_name:
+          type: string
+          example: "Gandalf"
+        char_class:
+          type: string
+          example: "wizard"
+        char_race:
+          type: string
+          example: "elf"
+        hit_points:
+          type: integer
+          example: 85
+        max_hit_points:
+          type: integer
+          example: 100
+        level:
+          type: integer
+          example: 5
+        experience:
+          type: integer
+          example: 1250
+        gold:
+          type: integer
+          example: 500
+        armor_class:
+          type: integer
+          example: 15
+        is_active:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+    
+    Tile:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 42
+        type:
+          type: integer
+          example: 1
+        content:
+          type: string
+          example: "You encounter a fierce dragon!"
+        playthrough_id:
+          type: integer
+          example: 1
+        tile_type_obj:
+          type: object
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+              example: "monster"
+            ascii_art:
+              type: string
+        available_actions:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              code:
+                type: string
+                example: "fight"
+              name:
+                type: string
+                example: "Fight"
+              description:
+                type: string
+        ascii_art:
+          type: string
+          example: "   /\\___/\\"
+    
+    CombatAction:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+          example: "attack_light"
+        name:
+          type: string
+          example: "Light Attack"
+        description:
+          type: string
+        damage_min:
+          type: integer
+          example: 3
+        damage_max:
+          type: integer
+          example: 8
+        heal_amount:
+          type: integer
+          example: 0
+        defense_boost:
+          type: integer
+          example: 0
+        success_rate:
+          type: integer
+          example: 95
+        requires_class:
+          type: string
+          nullable: true
+        requires_race:
+          type: string
+          nullable: true
+    
+    Encounter:
+      type: object
+      properties:
+        id:
+          type: integer
+        player_id:
+          type: integer
+        tile_id:
+          type: integer
+        combat_action_id:
+          type: integer
+        player_hp_before:
+          type: integer
+        player_hp_after:
+          type: integer
+        damage_dealt:
+          type: integer
+        damage_received:
+          type: integer
+        was_successful:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: Create a new user account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - email
+                - password
+              properties:
+                username:
+                  type: string
+                  example: "player123"
+                email:
+                  type: string
+                  format: email
+                  example: "player@example.com"
+                password:
+                  type: string
+                  format: password
+                  example: "SecurePass123!"
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "User created successfully"
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login to receive JWT tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                  example: "player123"
+                password:
+                  type: string
+                  format: password
+                  example: "SecurePass123!"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Login successful"
+                  access_token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  refresh_token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: New access token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+
+  /auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get current user information
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /player/characters:
+    get:
+      tags:
+        - Player
+      summary: Get all characters for authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of characters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  characters:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PlayerCharacter'
+    
+    post:
+      tags:
+        - Player
+      summary: Create a new character
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - char_name
+                - char_class
+                - char_race
+              properties:
+                char_name:
+                  type: string
+                  example: "Gandalf"
+                char_class:
+                  type: string
+                  example: "wizard"
+                char_race:
+                  type: string
+                  example: "elf"
+      responses:
+        '201':
+          description: Character created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  character:
+                    $ref: '#/components/schemas/PlayerCharacter'
+
+  /player/characters/{character_id}:
+    get:
+      tags:
+        - Player
+      summary: Get character by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: character_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Character information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerCharacter'
+        '403':
+          description: Access denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Character not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    
+    patch:
+      tags:
+        - Player
+      summary: Update character
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: character_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hit_points:
+                  type: integer
+                gold:
+                  type: integer
+                experience:
+                  type: integer
+                is_active:
+                  type: boolean
+      responses:
+        '200':
+          description: Character updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  character:
+                    $ref: '#/components/schemas/PlayerCharacter'
+
+  /player/characters/{character_id}/stats:
+    get:
+      tags:
+        - Player
+      summary: Get detailed character statistics
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: character_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Character statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  character:
+                    $ref: '#/components/schemas/PlayerCharacter'
+                  statistics:
+                    type: object
+                    properties:
+                      total_encounters:
+                        type: integer
+                      successful_encounters:
+                        type: integer
+                      success_rate:
+                        type: number
+                        format: float
+                      total_damage_dealt:
+                        type: integer
+                      total_damage_received:
+                        type: integer
+                      average_damage_dealt:
+                        type: number
+                        format: float
+
+  /player/{player_id}/tiles/current:
+    get:
+      tags:
+        - Tiles
+      summary: Get current tile for player
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: player_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Current tile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tile'
+
+  /player/{player_id}/tiles/{tile_id}:
+    get:
+      tags:
+        - Tiles
+      summary: Get specific tile by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: player_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: tile_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Tile information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tile'
+
+  /player/{player_id}/tiles/{tile_id}/action:
+    post:
+      tags:
+        - Tiles
+      summary: Execute action on tile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: player_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: tile_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action_code
+              properties:
+                action_code:
+                  type: string
+                  example: "fight"
+                combat_action_code:
+                  type: string
+                  example: "attack_light"
+      responses:
+        '200':
+          description: Action result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  player_hp:
+                    type: integer
+                  gold_change:
+                    type: integer
+                  experience_change:
+                    type: integer
+                  next_tile_id:
+                    type: integer
+                    nullable: true
+                  encounter:
+                    $ref: '#/components/schemas/Encounter'
+
+  /player/{player_id}/tiles/next:
+    post:
+      tags:
+        - Tiles
+      summary: Advance to next tile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: player_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: New tile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tile'
+
+  /player/{player_id}/tiles/{tile_id}/combat-actions:
+    get:
+      tags:
+        - Combat
+      summary: Get available combat actions for tile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: player_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: tile_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Available combat actions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tile_id:
+                    type: integer
+                  tile_type:
+                    type: integer
+                  available_actions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CombatAction'
+
+  /player/{player_id}/combat/execute:
+    post:
+      tags:
+        - Combat
+      summary: Execute a combat action
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: player_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tile_id
+                - combat_action_code
+              properties:
+                tile_id:
+                  type: integer
+                combat_action_code:
+                  type: string
+                  example: "attack_heavy"
+      responses:
+        '200':
+          description: Combat result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  player_hp:
+                    type: integer
+                  damage_dealt:
+                    type: integer
+                  damage_received:
+                    type: integer
+                  gold_change:
+                    type: integer
+                  experience_change:
+                    type: integer
+                  encounter:
+                    $ref: '#/components/schemas/Encounter'
+
+  /player/{player_id}/encounters:
+    get:
+      tags:
+        - Combat
+      summary: Get encounter history
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: player_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of encounters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  encounters:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Encounter'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
