@@ -304,3 +304,249 @@ textarea[readonly] {
         padding: 15px;
     }
 }
+
+/* ================================================================ */
+/* Combat Action Modal System */
+/* ================================================================ */
+
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0);
+    transition: background-color 0.3s ease;
+}
+
+.modal.show .modal-overlay {
+    background-color: rgba(0, 0, 0, 0.8);
+}
+
+.modal-content {
+    position: relative;
+    background-color: var(--bg-light);
+    border: 2px solid var(--accent-color);
+    border-radius: 8px;
+    max-width: 800px;
+    width: 90%;
+    max-height: 80vh;
+    overflow: hidden;
+    transform: scale(0.7);
+    opacity: 0;
+    transition: all 0.3s ease;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.modal.show .modal-content {
+    transform: scale(1);
+    opacity: 1;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 2px solid var(--accent-color);
+    background-color: var(--secondary-color);
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: var(--accent-color);
+    font-size: 1.5rem;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--text-light);
+    font-size: 2rem;
+    cursor: pointer;
+    padding: 0;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.modal-close:hover {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+.modal-body {
+    padding: 1.5rem;
+    overflow-y: auto;
+    max-height: calc(80vh - 100px);
+}
+
+/* Combat Actions Grid */
+.combat-actions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1rem;
+}
+
+.combat-action-card {
+    background: linear-gradient(135deg, var(--secondary-color) 0%, var(--bg-light) 100%);
+    border: 2px solid var(--primary-color);
+    border-radius: 8px;
+    padding: 1.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.combat-action-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, rgba(237, 137, 54, 0.1) 0%, transparent 100%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.combat-action-card:hover {
+    border-color: var(--accent-color);
+    transform: translateY(-5px);
+    box-shadow: 0 10px 25px rgba(237, 137, 54, 0.3);
+}
+
+.combat-action-card:hover::before {
+    opacity: 1;
+}
+
+.combat-action-card:active {
+    transform: translateY(-2px);
+}
+
+.action-icon {
+    font-size: 3rem;
+    text-align: center;
+    margin-bottom: 0.5rem;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+.action-name {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: var(--accent-color);
+    text-align: center;
+    margin-bottom: 0.5rem;
+}
+
+.requirement {
+    display: inline-block;
+    font-size: 0.7rem;
+    background-color: var(--accent-color);
+    color: var(--bg-dark);
+    padding: 0.2rem 0.5rem;
+    border-radius: 12px;
+    margin-left: 0.5rem;
+    font-weight: normal;
+}
+
+.action-description {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-align: center;
+    margin-bottom: 1rem;
+    min-height: 2.5rem;
+}
+
+.action-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+}
+
+.stat {
+    font-size: 0.9rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+.stat.damage {
+    background-color: rgba(245, 101, 101, 0.2);
+    color: #fc8181;
+}
+
+.stat.heal {
+    background-color: rgba(72, 187, 120, 0.2);
+    color: #68d391;
+}
+
+.stat.defense {
+    background-color: rgba(66, 153, 225, 0.2);
+    color: #63b3ed;
+}
+
+.action-success {
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+}
+
+.loading, .error, .no-actions {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-muted);
+    font-size: 1.1rem;
+}
+
+.error {
+    color: var(--danger-color);
+}
+
+/* Mobile Responsive for Combat Modal */
+@media (max-width: 768px) {
+    .combat-actions-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .modal-content {
+        width: 95%;
+        max-height: 90vh;
+    }
+
+    .modal-body {
+        padding: 1rem;
+    }
+
+    .combat-action-card {
+        padding: 1rem;
+    }
+
+    .action-icon {
+        font-size: 2.5rem;
+    }
+
+    .action-name {
+        font-size: 1rem;
+    }
+}
