@@ -425,12 +425,16 @@ def execute_tile_action(playerid, tile_id):
         tile_type = model.db.session.get(model.TileTypeOption, tile_record.type)
         tile_type_name = tile_type.name if tile_type else None
 
+        # Check for combat_action_code parameter (for enhanced combat)
+        combat_action_code = request.form.get("combat_action_code")
+
         # Execute action using combat service
         combat_result = combat_service.execute_action(
             player=player_record,
             tile=tile_record,
             action_name=action_name,
-            tile_type_name=tile_type_name
+            tile_type_name=tile_type_name,
+            combat_action_code=combat_action_code
         )
 
         # Get or create action record for history tracking
@@ -500,6 +504,60 @@ def execute_tile_action(playerid, tile_id):
         ascii_art=ascii_art,
         readonly=True,
         action_result=combat_result.message
+    )
+
+
+@main_bp.route("/player/<int:player_id>/game/tile/<int:tile_id>/combat-actions", methods=["GET"])
+@login_required
+def get_combat_actions(player_id, tile_id):
+    """
+    Get available combat actions for a player on a specific tile.
+    Returns JSON list of available CombatActions filtered by class/race.
+    """
+    # Verify player
+    player = model.db.session.get(model.User, player_id)
+    if not player:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(error="Player not found"), 404
+        abort(404, description="Player not found")
+    
+    # Verify tile
+    tile = model.db.session.get(model.Tile, tile_id)
+    if not tile:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(error="Tile not found"), 404
+        abort(404, description="Tile not found")
+    
+    # Get tile type
+    tile_type = model.db.session.get(model.TileTypeOption, tile.type)
+    tile_type_name = tile_type.name if tile_type else None
+    
+    # Get available actions
+    combat_service = CombatService()
+    actions = combat_service.get_available_actions(player, tile_type_name)
+    
+    # Format for JSON response
+    actions_data = [
+        {
+            "id": action.id,
+            "code": action.code,
+            "name": action.name,
+            "description": action.description,
+            "damage_min": action.damage_min,
+            "damage_max": action.damage_max,
+            "heal_amount": action.heal_amount,
+            "defense_boost": action.defense_boost,
+            "success_rate": action.success_rate,
+            "requires_class": action.required_class.name if action.required_class else None,
+            "requires_race": action.required_race.name if action.required_race else None
+        }
+        for action in actions
+    ]
+    
+    return jsonify(
+        tile_id=tile_id,
+        tile_type=tile_type_name,
+        available_actions=actions_data
     )
 
 

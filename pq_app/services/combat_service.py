@@ -6,10 +6,10 @@ for both web UI and future API endpoints.
 """
 
 import random
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List
 from datetime import datetime, timezone
 from flask import flash
-from sqlalchemy import select
+from sqlalchemy import select, or_
 
 from .. import model
 
@@ -109,6 +109,149 @@ class CombatService:
 
         return True, None
 
+    def get_available_actions(
+        self, 
+        player: model.User, 
+        tile_type_name: Optional[str] = None,
+        include_basic: bool = True
+    ) -> List[model.CombatAction]:
+        """
+        Get combat actions available to player based on class, race, and context.
+        
+        Filters CombatActions by:
+        - Player class (requires_class filter)
+        - Player race (requires_race filter)
+        - Tile type context (combat actions on monster tiles, etc.)
+        
+        Args:
+            player: User/player instance
+            tile_type_name: Optional tile type for context-based filtering
+            include_basic: Include actions with no class/race requirements
+            
+        Returns:
+            List of CombatAction records sorted by name
+        """
+        query = model.CombatAction.query
+        
+        # Filter by class: include if no requirement OR matches player's class
+        class_filter = or_(
+            model.CombatAction.requires_class.is_(None),
+            model.CombatAction.requires_class == player.playerclass
+        )
+        
+        # Filter by race: include if no requirement OR matches player's race
+        race_filter = or_(
+            model.CombatAction.requires_race.is_(None),
+            model.CombatAction.requires_race == player.playerrace
+        )
+        
+        query = query.filter(class_filter, race_filter)
+        
+        # Context-based filtering
+        if tile_type_name == "monster":
+            # On monster tiles, show attack and defense actions
+            # Exclude pure healing actions that don't make sense in combat
+            pass  # All actions are valid in combat for now
+        elif tile_type_name and tile_type_name != "monster":
+            # On non-monster tiles, maybe only show flee, heal, inspect-like actions
+            # For now, allow all actions
+            pass
+        
+        return query.order_by(model.CombatAction.name).all()
+
+    def execute_combat_action(
+        self,
+        player: model.User,
+        tile: model.Tile,
+        combat_action: model.CombatAction,
+        monster_hp: int = 50
+    ) -> CombatResult:
+        """
+        Execute a CombatAction with full mechanics:
+        - Roll success based on success_rate
+        - Calculate damage (random between min/max)
+        - Apply healing
+        - Track encounter in Encounter table
+        
+        Args:
+            player: User/player instance
+            tile: Tile instance
+            combat_action: CombatAction to execute
+            monster_hp: Current monster HP (default 50)
+            
+        Returns:
+            CombatResult with action outcome
+        """
+        # Store player HP before action
+        hp_before = player.hitpoints
+        
+        # Roll for success
+        roll = random.randint(1, 100)
+        success = roll <= combat_action.success_rate
+        
+        damage_dealt = 0
+        damage_received = 0
+        hp_change = 0
+        message = ""
+        
+        if not success:
+            # Action failed
+            message = f"{combat_action.name} failed! (Rolled {roll}, needed {combat_action.success_rate} or less)"
+            flash(message)
+        else:
+            # Action succeeded
+            parts = []
+            
+            # Calculate damage dealt (if attack action)
+            if combat_action.damage_max > 0:
+                damage_dealt = random.randint(combat_action.damage_min, combat_action.damage_max)
+                parts.append(f"dealt {damage_dealt} damage")
+                
+                # Monster counter-attack (simplified - 50% chance)
+                if random.randint(1, 100) <= 50:
+                    damage_received = random.randint(3, 10)
+                    player.take_damage(damage_received)
+                    hp_change -= damage_received
+                    parts.append(f"received {damage_received} damage")
+            
+            # Apply healing
+            if combat_action.heal_amount > 0:
+                healed = min(combat_action.heal_amount, player.max_hp - player.hitpoints)
+                player.heal(combat_action.heal_amount)
+                hp_change += healed
+                parts.append(f"healed {healed} HP")
+            
+            # Note defense boost (not yet implemented in player state)
+            if combat_action.defense_boost > 0:
+                parts.append(f"gained +{combat_action.defense_boost} defense")
+            
+            message = f"{combat_action.name}: " + ", ".join(parts) + "!"
+            flash(message)
+        
+        # Create Encounter record
+        encounter = model.Encounter(
+            tile_id=tile.id,
+            user_id=player.id,
+            combat_action_id=combat_action.id,
+            player_hp_before=hp_before,
+            player_hp_after=player.hitpoints,
+            monster_hp_before=monster_hp,
+            monster_hp_after=max(0, monster_hp - damage_dealt) if damage_dealt > 0 else monster_hp,
+            damage_dealt=damage_dealt,
+            damage_received=damage_received,
+            was_successful=success,
+            result_message=message
+        )
+        self.db.add(encounter)
+        
+        return CombatResult(
+            success=success,
+            message=message,
+            player_hp_change=hp_change,
+            player_alive=player.is_alive,
+            tile_completed=True
+        )
+
     def get_or_create_action_record(
         self, tile_id: int, action_name: str, action_option: Optional[model.ActionOption]
     ) -> int:
@@ -143,16 +286,23 @@ class CombatService:
         return new_action.id
 
     def execute_action(
-        self, player: model.User, tile: model.Tile, action_name: str, tile_type_name: Optional[str] = None
+        self, 
+        player: model.User, 
+        tile: model.Tile, 
+        action_name: str, 
+        tile_type_name: Optional[str] = None,
+        combat_action_code: Optional[str] = None
     ) -> CombatResult:
         """
-        Execute a combat/tile action
+        Execute a combat/tile action. Routes to either legacy actions (rest, fight, inspect, quit)
+        or new CombatAction system.
 
         Args:
             player: User/player instance
             tile: Tile instance
             action_name: Name of the action to execute
             tile_type_name: Type of tile (monster, treasure, etc.)
+            combat_action_code: Optional CombatAction code for enhanced combat
 
         Returns:
             CombatResult with action outcome
@@ -160,7 +310,13 @@ class CombatService:
         if tile_type_name is None and tile.tile_type:
             tile_type_name = tile.tile_type.name
 
-        # Execute action based on type
+        # Check if this is a CombatAction code
+        if combat_action_code:
+            combat_action = model.CombatAction.query.filter_by(code=combat_action_code).first()
+            if combat_action:
+                return self.execute_combat_action(player, tile, combat_action)
+
+        # Execute legacy action based on type
         if action_name == "rest":
             return self._execute_rest(player, tile_type_name)
         elif action_name == "fight":
@@ -170,6 +326,11 @@ class CombatService:
         elif action_name == "quit":
             return self._execute_quit(player, tile)
         else:
+            # Try to match as CombatAction by name
+            combat_action = model.CombatAction.query.filter_by(name=action_name).first()
+            if combat_action:
+                return self.execute_combat_action(player, tile, combat_action)
+            
             # Unknown action - default behavior
             return CombatResult(success=True, message=f"Performed action: {action_name}", tile_completed=True)
 
