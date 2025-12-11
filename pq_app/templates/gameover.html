@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}Game Over - PyQuest{% endblock %}
+
+{% block content %}
+<div class="game-over-container">
+    <h1>💀 Game Over 💀</h1>
+    
+    <div class="game-over-message">
+        <p>Your adventure has come to an end...</p>
+        <p><strong>{{ player_char.username }}</strong> has fallen in battle!</p>
+    </div>
+    
+    <div class="game-stats">
+        <h2>Final Statistics</h2>
+        <ul>
+            <li><strong>Character:</strong> {{ player_char.username }}</li>
+            <li><strong>Class:</strong> {{ player_class_name or "Unknown" }}</li>
+            <li><strong>Race:</strong> {{ player_race_name or "Unknown" }}</li>
+            <li><strong>Level:</strong> {{ player_char.level }}</li>
+            <li><strong>Experience:</strong> {{ player_char.exp_points }} XP</li>
+            <li><strong>Tiles Explored:</strong> {{ tiles_explored }}</li>
+        </ul>
+    </div>
+    
+    <div class="game-over-actions">
+        <a href="{{ url_for('main.restart_game', player_id=player_char.id) }}" class="btn btn-primary">Start New Adventure</a>
+        <a href="{{ url_for('main.get_history', player_id=player_char.id) }}" class="btn btn-secondary">View History</a>
+        <a href="{{ url_for('main.greet_user') }}" class="btn btn-secondary">Home</a>
+    </div>
+</div>
+
+<style>
+.game-over-container {
+    max-width: 600px;
+    margin: 50px auto;
+    text-align: center;
+    padding: 30px;
+    background: linear-gradient(135deg, #1a1a1a 0%, #2d0a0a 100%);
+    border: 3px solid #8b0000;
+    border-radius: 10px;
+    box-shadow: 0 0 20px rgba(139, 0, 0, 0.5);
+}
+
+.game-over-container h1 {
+    color: #ff4444;
+    font-size: 3em;
+    margin-bottom: 20px;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.game-over-message {
+    background: rgba(0, 0, 0, 0.5);
+    padding: 20px;
+    border-radius: 5px;
+    margin: 20px 0;
+    color: #ddd;
+}
+
+.game-over-message p {
+    margin: 10px 0;
+    font-size: 1.2em;
+}
+
+.game-stats {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 20px;
+    border-radius: 5px;
+    margin: 20px 0;
+}
+
+.game-stats h2 {
+    color: #ffaa00;
+    margin-bottom: 15px;
+}
+
+.game-stats ul {
+    list-style: none;
+    padding: 0;
+    text-align: left;
+}
+
+.game-stats li {
+    padding: 8px;
+    margin: 5px 0;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 3px;
+    color: #ddd;
+}
+
+.game-over-actions {
+    margin-top: 30px;
+}
+
+.btn {
+    display: inline-block;
+    padding: 12px 30px;
+    margin: 10px 5px;
+    text-decoration: none;
+    border-radius: 5px;
+    font-weight: bold;
+    transition: all 0.3s;
+}
+
+.btn-primary {
+    background: #00aa00;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #00ff00;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+}
+
+.btn-secondary {
+    background: #555;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #777;
+}
+</style>
+{% endblock %}

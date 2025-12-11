@@ -328,3 +328,85 @@ def test_get_history_unauthorized(client, user_with_character):
     response = client.get(f"/player/{user_id + 999}/game/history")
     assert response.status_code == 403
 
+
+def test_game_over_when_hp_zero(client, user_with_character):
+    """Test that User.is_alive property and take_damage work correctly."""
+    user_id = user_with_character["user_id"]
+    
+    # Test the is_alive property and take_damage method
+    with client.application.app_context():
+        user = User.query.get(user_id)
+        
+        # User should be alive initially
+        assert user.is_alive
+        assert user.hitpoints > 0
+        
+        # Take damage but stay alive
+        initial_hp = user.hitpoints
+        user.take_damage(10)
+        assert user.hitpoints == initial_hp - 10
+        assert user.is_alive
+        
+        # Take fatal damage
+        user.take_damage(user.hitpoints + 10)
+        assert user.hitpoints == 0
+        assert not user.is_alive
+
+
+def test_game_over_route(client, user_with_character):
+    """Test the game over route displays correctly."""
+    user_id = user_with_character["user_id"]
+    
+    # Set player to dead
+    with client.application.app_context():
+        user = User.query.get(user_id)
+        user.hitpoints = 0
+        db.session.commit()
+    
+    response = client.get(f"/player/{user_id}/gameover")
+    assert response.status_code == 200
+    assert b"Game Over" in response.data
+    assert b"authuser" in response.data
+
+
+def test_restart_game(client, user_with_character):
+    """Test restarting the game redirects to setup."""
+    user_id = user_with_character["user_id"]
+    
+    # Restart the game
+    response = client.post(
+        f"/player/{user_id}/restart",
+        follow_redirects=True,
+    )
+    
+    assert response.status_code == 200
+    # Should redirect to character setup
+    assert b"setup" in response.data or b"charsetup" in response.data.lower()
+
+
+def test_heal_respects_max_hp(client, user_with_character):
+    """Test that healing with rest action respects max HP."""
+    user_id = user_with_character["user_id"]
+    tile_id = user_with_character["tile_id"]
+    
+    # Set player HP to max
+    with client.application.app_context():
+        user = User.query.get(user_id)
+        user.hitpoints = user.max_hp
+        db.session.commit()
+    
+    # Execute rest action (ID 1 based on init_defaults)
+    action_id = 1
+    
+    client.post(
+        f"/player/{user_id}/game/tile/{tile_id}/action",
+        data={"action": action_id},
+        follow_redirects=True,
+    )
+    
+    # Verify HP didn't exceed max
+    with client.application.app_context():
+        user = User.query.get(user_id)
+        assert user.hitpoints == user.max_hp
+        assert user.hitpoints <= 100
+
