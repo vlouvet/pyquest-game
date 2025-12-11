@@ -6,7 +6,16 @@
 import pytest
 from werkzeug.security import generate_password_hash
 from pq_app import create_app
-from pq_app.model import User, db, PlayerClass, PlayerRace, Tile, TileTypeOption, ActionOption, Action
+from pq_app.model import (
+    User,
+    db,
+    PlayerClass,
+    PlayerRace,
+    Tile,
+    TileTypeOption,
+    ActionOption,
+    Action,
+)
 
 
 def test_home_redirect(client):
@@ -69,12 +78,16 @@ def test_register_post_success(client):
     """Test a successful POST registration."""
     response = client.post(
         "/register",
-        data={"username": "newuser", "password": "password123", "confirm": "password123"},
+        data={
+            "username": "newuser",
+            "password": "password123",
+            "confirm": "password123",
+        },
         follow_redirects=True,
     )
     assert response.status_code == 200
     assert b"Login" in response.data
-    
+
     # Verify user was created in database
     with client.application.app_context():
         user = User.query.filter_by(username="newuser").first()
@@ -89,7 +102,7 @@ def test_logout(client, setup_test_user):
         data={"username": "testuser", "password": "testpassword"},
         follow_redirects=True,
     )
-    
+
     # Then logout
     response = client.get("/logout", follow_redirects=True)
     assert response.status_code == 200
@@ -106,13 +119,13 @@ def authenticated_user(client):
         db.session.add(user)
         db.session.commit()
         user_id = user.id
-    
+
     client.post(
         "/login",
         data={"username": "authuser", "password": "password123"},
         follow_redirects=True,
     )
-    
+
     return user_id
 
 
@@ -126,14 +139,14 @@ def setup_game_data(client):
             mage = PlayerClass(name="Mage")
             db.session.add(warrior)
             db.session.add(mage)
-        
+
         # Add PlayerRace
         if not PlayerRace.query.first():
             human = PlayerRace(name="Human")
             elf = PlayerRace(name="Elf")
             db.session.add(human)
             db.session.add(elf)
-        
+
         # Add TileTypeOption
         if not TileTypeOption.query.first():
             sign = TileTypeOption(name="sign")
@@ -144,7 +157,7 @@ def setup_game_data(client):
             db.session.add(monster)
             db.session.add(scene)
             db.session.add(treasure)
-        
+
         # Add ActionOption
         if not ActionOption.query.first():
             rest = ActionOption(name="Rest")
@@ -153,7 +166,7 @@ def setup_game_data(client):
             db.session.add(rest)
             db.session.add(explore)
             db.session.add(fight)
-        
+
         db.session.commit()
 
 
@@ -169,7 +182,7 @@ def test_setup_char_post(client, authenticated_user, setup_game_data):
     with client.application.app_context():
         player_class = PlayerClass.query.first()
         player_race = PlayerRace.query.first()
-    
+
     response = client.post(
         f"/player/{authenticated_user}/setup",
         data={
@@ -179,7 +192,7 @@ def test_setup_char_post(client, authenticated_user, setup_game_data):
         follow_redirects=True,
     )
     assert response.status_code == 200
-    
+
     # Verify user was updated
     with client.application.app_context():
         user = User.query.get(authenticated_user)
@@ -215,18 +228,18 @@ def user_with_character(client, authenticated_user, setup_game_data):
         player_class = PlayerClass.query.first()
         player_race = PlayerRace.query.first()
         tile_type = TileTypeOption.query.first()
-        
+
         user.playerclass = player_class.id
         user.playerrace = player_race.id
         user.hitpoints = 100
-        
+
         # Create a tile for the user
         tile = Tile(user_id=user.id, type=tile_type.id, action_taken=False)
         db.session.add(tile)
         db.session.commit()
-        
+
         tile_id = tile.id
-    
+
     return {"user_id": authenticated_user, "tile_id": tile_id}
 
 
@@ -249,18 +262,18 @@ def test_execute_tile_action(client, user_with_character):
     """Test executing an action on a tile."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     with client.application.app_context():
         action = ActionOption.query.first()
         action_id = action.id
-    
+
     response = client.post(
         f"/player/{user_id}/game/tile/{tile_id}/action",
         data={"action": action_id},
         follow_redirects=True,
     )
     assert response.status_code == 200
-    
+
     # Verify tile was marked as actioned
     with client.application.app_context():
         tile = Tile.query.get(tile_id)
@@ -271,7 +284,7 @@ def test_execute_tile_action_unauthorized(client, user_with_character):
     """Test that users cannot execute actions on other users' tiles."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     response = client.post(
         f"/player/{user_id + 999}/game/tile/{tile_id}/action",
         data={"action": 1},
@@ -283,13 +296,13 @@ def test_generate_tile(client, user_with_character):
     """Test generating a new tile."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     # First mark the current tile as actioned
     with client.application.app_context():
         tile = Tile.query.get(tile_id)
         tile.action_taken = True
         db.session.commit()
-    
+
     response = client.get(f"/player/{user_id}/game/tile/next", follow_redirects=True)
     assert response.status_code == 200
 
@@ -332,21 +345,21 @@ def test_get_history_unauthorized(client, user_with_character):
 def test_game_over_when_hp_zero(client, user_with_character):
     """Test that User.is_alive property and take_damage work correctly."""
     user_id = user_with_character["user_id"]
-    
+
     # Test the is_alive property and take_damage method
     with client.application.app_context():
         user = User.query.get(user_id)
-        
+
         # User should be alive initially
         assert user.is_alive
         assert user.hitpoints > 0
-        
+
         # Take damage but stay alive
         initial_hp = user.hitpoints
         user.take_damage(10)
         assert user.hitpoints == initial_hp - 10
         assert user.is_alive
-        
+
         # Take fatal damage
         user.take_damage(user.hitpoints + 10)
         assert user.hitpoints == 0
@@ -356,13 +369,13 @@ def test_game_over_when_hp_zero(client, user_with_character):
 def test_game_over_route(client, user_with_character):
     """Test the game over route displays correctly."""
     user_id = user_with_character["user_id"]
-    
+
     # Set player to dead
     with client.application.app_context():
         user = User.query.get(user_id)
         user.hitpoints = 0
         db.session.commit()
-    
+
     response = client.get(f"/player/{user_id}/gameover")
     assert response.status_code == 200
     assert b"Game Over" in response.data
@@ -372,13 +385,13 @@ def test_game_over_route(client, user_with_character):
 def test_restart_game(client, user_with_character):
     """Test restarting the game redirects to setup."""
     user_id = user_with_character["user_id"]
-    
+
     # Restart the game
     response = client.post(
         f"/player/{user_id}/restart",
         follow_redirects=True,
     )
-    
+
     assert response.status_code == 200
     # Should redirect to character setup
     assert b"setup" in response.data or b"charsetup" in response.data.lower()
@@ -388,25 +401,24 @@ def test_heal_respects_max_hp(client, user_with_character):
     """Test that healing with rest action respects max HP."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     # Set player HP to max
     with client.application.app_context():
         user = User.query.get(user_id)
         user.hitpoints = user.max_hp
         db.session.commit()
-    
+
     # Execute rest action (ID 1 based on init_defaults)
     action_id = 1
-    
+
     client.post(
         f"/player/{user_id}/game/tile/{tile_id}/action",
         data={"action": action_id},
         follow_redirects=True,
     )
-    
+
     # Verify HP didn't exceed max
     with client.application.app_context():
         user = User.query.get(user_id)
         assert user.hitpoints == user.max_hp
         assert user.hitpoints <= 100
-

@@ -10,7 +10,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from . import model, gameforms, pqMonsters, gameTile
 
 # Create Blueprint
-main_bp = Blueprint('main', __name__)
+main_bp = Blueprint("main", __name__)
 
 
 @main_bp.route("/register", methods=["GET", "POST"])
@@ -78,7 +78,7 @@ def setup_char(player_id):
     # Authorization check
     if current_user.id != player_id:
         abort(403)
-    
+
     user_profile = model.User.query.get_or_404(player_id)
     user_profile_id = user_profile.id
     form = gameforms.CharacterForm(obj=user_profile)
@@ -99,7 +99,7 @@ def setup_char(player_id):
         # Manually set playerclass and playerrace from form data
         user_profile.playerclass = form.charclass.data
         user_profile.playerrace = form.charrace.data
-        
+
         # if no tile exists for this user, create a tile
         if not model.Tile.query.filter_by(user_id=user_profile_id).first():
             current_tile = model.Tile()
@@ -107,16 +107,14 @@ def setup_char(player_id):
             current_tile.type = tile_type["id"]
             model.db.session.add(current_tile)
         form = gameforms.TileForm()
-        form.type.data = tile_type['name']
+        form.type.data = tile_type["name"]
         user_profile.hitpoints = 100
         model.db.session.add(user_profile)
         model.db.session.commit()
         print("profile saved")
         return redirect(url_for("main.char_start", id=user_profile_id))
     elif request.method == "GET":
-        return render_template(
-            "charsetup.html", player_char=user_profile, form=form
-        )
+        return render_template("charsetup.html", player_char=user_profile, form=form)
     else:
         return {"Error": "Invalid request method"}
 
@@ -129,7 +127,9 @@ def char_start(id):
         abort(403)
     # TODO: query db to get user profile
     user_profile = model.User.query.get_or_404(id)
-    char_message = "This is a test message to be displayed when the player first starts the game"
+    char_message = (
+        "This is a test message to be displayed when the player first starts the game"
+    )
     return render_template(
         "charStart.html", charMessage=char_message, player_char_id=user_profile.id
     )
@@ -143,13 +143,13 @@ def get_tile(player_id):
     # Authorization check
     if current_user.id != player_id:
         abort(403)
-    
+
     user_profile = model.User.query.get(player_id)
-    
+
     # Check if player is dead before showing tile
     if not user_profile.is_alive:
         return redirect(url_for("main.game_over", player_id=player_id))
-    
+
     tile_config = gameTile.pqGameTile()
     tile_details = (
         model.Tile.query.filter_by(user_id=player_id)
@@ -177,13 +177,13 @@ def get_tile(player_id):
             (action_option.id, action_option.name)
             for action_option in model.ActionOption.query.join(
                 model.Action, model.Action.actionverb == model.ActionOption.id
-            ).filter(
-                model.Action.tile == tile_details.id
-            ).order_by(
-                model.ActionOption.name
             )
+            .filter(model.Action.tile == tile_details.id)
+            .order_by(model.ActionOption.name)
         ]
-        return render_template("gameTile.html", player_char=user_profile, form=form, readonly=True)
+        return render_template(
+            "gameTile.html", player_char=user_profile, form=form, readonly=True
+        )
     form.action.choices = [
         (tileaction.id, tileaction.name)
         for tileaction in model.ActionOption.query.order_by("name")
@@ -197,9 +197,9 @@ def generate_tile(player_id):
     # Authorization check
     if current_user.id != player_id:
         abort(403)
-    
+
     user_profile = model.User.query.get_or_404(player_id)
-    
+
     # Check if player is dead
     if not user_profile.is_alive:
         return redirect(url_for("main.game_over", player_id=player_id))
@@ -247,13 +247,15 @@ def generate_tile(player_id):
     return render_template("gameTile.html", player_char=user_profile, form=tile_details)
 
 
-@main_bp.route("/player/<int:playerid>/game/tile/<int:tile_id>/action", methods=["POST"])
+@main_bp.route(
+    "/player/<int:playerid>/game/tile/<int:tile_id>/action", methods=["POST"]
+)
 @login_required
 def execute_tile_action(playerid, tile_id):
     # Authorization check
     if current_user.id != playerid:
         abort(403)
-    
+
     tile_record = model.Tile.query.get(tile_id)
     # Get action from request form data
     action_type_ID = request.form.get("action", type=int)
@@ -271,30 +273,30 @@ def execute_tile_action(playerid, tile_id):
         # handle rest
         player_record = model.User.query.get(playerid)
         print(f"Player_id: {player_record.id}")
-        
+
         if action_type_ID == 1:  # if requested action is to rest..
             tile_record.action = 1
             player_record.heal(10)  # Use heal method to respect max_hp
             flash("You rest and recover 10 HP.")
-            
+
         elif action_type_ID == 3:  # if requested action is to fight..
             tile_record.action = 3  # save the action to the tile
             # Simple combat: player takes random damage
             damage = random.randint(5, 20)
             player_record.take_damage(damage)
             flash(f"You fought bravely and took {damage} damage!")
-        
+
         tile_record.user_id = player_record.id
         tile_record.action_taken = True
         model.db.session.add(tile_record)
         model.db.session.add(player_record)
         model.db.session.commit()
-        
+
         # Check if player is still alive after action
         if not player_record.is_alive:
             flash("You have fallen in battle...")
             return redirect(url_for("main.game_over", player_id=playerid))
-        
+
         # return the generate tile function to display the next tile
         return redirect(url_for("main.generate_tile", player_id=playerid))
         # return {"status_code": 200, "data": "success"}
@@ -327,7 +329,9 @@ def get_history(player_id):
     # get current logged in user profile
     user_profile = model.User.query.get(player_id)
     tile_history = model.Tile.query.filter_by(user_id=player_id).all()
-    return render_template("gameHistory.html", player_char=user_profile, history=tile_history)
+    return render_template(
+        "gameHistory.html", player_char=user_profile, history=tile_history
+    )
 
 
 @main_bp.route("/player/<int:player_id>/gameover", methods=["GET"])
@@ -337,9 +341,9 @@ def game_over(player_id):
     # Authorization check
     if current_user.id != player_id:
         abort(403)
-    
+
     user_profile = model.User.query.get_or_404(player_id)
-    
+
     # Get player class and race names
     player_class_name = None
     player_race_name = None
@@ -349,16 +353,16 @@ def game_over(player_id):
     if user_profile.playerrace:
         player_race = model.PlayerRace.query.get(user_profile.playerrace)
         player_race_name = player_race.name if player_race else "Unknown"
-    
+
     # Count tiles explored
     tiles_explored = model.Tile.query.filter_by(user_id=player_id).count()
-    
+
     return render_template(
         "gameover.html",
         player_char=user_profile,
         player_class_name=player_class_name,
         player_race_name=player_race_name,
-        tiles_explored=tiles_explored
+        tiles_explored=tiles_explored,
     )
 
 
@@ -369,18 +373,18 @@ def restart_game(player_id):
     # Authorization check
     if current_user.id != player_id:
         abort(403)
-    
+
     user_profile = model.User.query.get_or_404(player_id)
-    
+
     # Reset player stats
     user_profile.hitpoints = user_profile.max_hp
     user_profile.exp_points = 0
     user_profile.level = 1
-    
+
     # Delete all old tiles
     model.Tile.query.filter_by(user_id=player_id).delete()
-    
+
     model.db.session.commit()
-    
+
     flash("Your adventure begins anew!")
     return redirect(url_for("main.setup_char", player_id=player_id))
