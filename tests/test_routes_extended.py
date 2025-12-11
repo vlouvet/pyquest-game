@@ -583,10 +583,10 @@ def test_generate_tile_no_actioned_tile(client, user_with_character):
 def test_generate_tile_requires_active_playthrough(client, user_with_character):
     """Test generate_tile redirects when no active playthrough exists."""
     user_id = user_with_character["user_id"]
-    
+
     # Try to generate a tile without starting a journey
     response = client.get(f"/player/{user_id}/game/tile/next", follow_redirects=False)
-    
+
     # Should redirect (to setup or play page)
     assert response.status_code == 302
 
@@ -727,3 +727,246 @@ def test_restart_game_clears_data(client, user_with_character):
         # Verify tiles were deleted
         tiles_after = Tile.query.filter_by(user_id=user_id).count()
         assert tiles_after == 0
+
+
+# === Additional Branch Coverage Tests ===
+
+
+# Test greet_user when user has class but no race (partial setup)
+def test_greet_user_partial_setup_class_only(client, setup_game_data):
+    """Test greet_user when user has class but not race."""
+    with client.application.app_context():
+        user = User(username="partialuser", password_hash=generate_password_hash("password"))
+        db.session.add(user)
+        db.session.flush()
+
+        player_class = PlayerClass.query.first()
+        user.playerclass = player_class.id
+        # Don't set playerrace - only one condition true
+
+        db.session.commit()
+        user_id = user.id
+
+    client.post("/login", data={"username": "partialuser", "password": "password"})
+    response = client.get("/", follow_redirects=False)
+
+    # Should redirect to setup since not fully configured
+    assert response.status_code == 302
+    assert f"/player/{user_id}/setup" in response.location
+
+
+# Test setup_char when user is dead but has no class (restart scenario)
+def test_setup_char_dead_no_class(client, authenticated_user, setup_game_data):
+    """Test setup_char when dead but playerclass is None (restart flow)."""
+    user_id = authenticated_user
+
+    with client.application.app_context():
+        user = db.session.get(User, user_id)
+        user.hitpoints = 0
+        user.playerclass = None  # No class set
+        db.session.commit()
+
+    response = client.get(f"/player/{user_id}/setup")
+
+    # Should NOT redirect to game_over since playerclass is None
+    assert response.status_code == 200
+    assert b"setup" in response.data.lower() or b"character" in response.data.lower()
+
+
+# Test setup_char POST when tile already exists
+def test_setup_char_post_with_existing_tile(client, user_with_character):
+    """Test setup_char POST when user already has tiles."""
+    user_id = user_with_character["user_id"]
+
+    with client.application.app_context():
+        user = db.session.get(User, user_id)
+        # Reset class/race to allow re-setup
+        user.playerclass = None
+        user.playerrace = None
+        db.session.commit()
+
+        player_class = PlayerClass.query.first()
+        player_race = PlayerRace.query.first()
+        class_id = player_class.id
+        race_id = player_race.id
+
+        # Verify tile exists
+        existing_tiles = Tile.query.filter_by(user_id=user_id).count()
+        assert existing_tiles > 0
+
+    response = client.post(
+        f"/player/{user_id}/setup",
+        data={"charclass": class_id, "charrace": race_id},
+        follow_redirects=False,
+    )
+
+    # Should not create new tile since one exists
+    assert response.status_code == 302
+
+    with client.application.app_context():
+        final_tiles = Tile.query.filter_by(user_id=user_id).count()
+        # Tile count should not increase
+        assert final_tiles == existing_tiles
+
+
+# Test execute_tile_action with non-POST method
+def test_execute_action_non_post(client, user_with_character):
+    """Test execute_tile_action with GET method."""
+    user_id = user_with_character["user_id"]
+    tile_id = user_with_character["tile_id"]
+    
+    response = client.get(f"/player/{user_id}/game/tile/{tile_id}/action")
+    
+    # Flask returns 405 Method Not Allowed for GET on POST-only route
+    assert response.status_code == 405
+# Test execute_tile_action with numeric action ID
+def test_execute_action_numeric_id(client, user_with_character):
+    """Test execute_tile_action with numeric action ID."""
+    user_id = user_with_character["user_id"]
+    tile_id = user_with_character["tile_id"]
+
+    with client.application.app_context():
+        rest_action = ActionOption.query.filter_by(code="rest").first()
+        action_id = str(rest_action.id)
+
+    response = client.post(
+        f"/player/{user_id}/game/tile/{tile_id}/action",
+        data={"action": action_id},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+
+
+# Test execute_tile_action when action history already exists
+def test_execute_action_with_existing_history(client, user_with_character):
+    """Test execute_tile_action when Action record already exists."""
+    user_id = user_with_character["user_id"]
+    tile_id = user_with_character["tile_id"]
+
+    with client.application.app_context():
+        # Pre-create an action record
+        rest_action = ActionOption.query.filter_by(code="rest").first()
+        existing_action = Action(name="rest", tile=tile_id, actionverb=rest_action.id)
+        db.session.add(existing_action)
+        db.session.commit()
+
+    response = client.post(
+        f"/player/{user_id}/game/tile/{tile_id}/action",
+        data={"action": "rest"},
+        follow_redirects=True,
+    )
+
+    # Should reuse existing action record
+    assert response.status_code == 200
+
+
+# Test execute_tile_action inspect on scene tile
+def test_execute_action_inspect_scene(client, user_with_character):
+    """Test inspect action on scene tile."""
+    user_id = user_with_character["user_id"]
+    tile_id = user_with_character["tile_id"]
+
+    with client.application.app_context():
+        tile = db.session.get(Tile, tile_id)
+        scene_type = TileTypeOption.query.filter_by(name="scene").first()
+        tile.type = scene_type.id
+        db.session.commit()
+
+    response = client.post(
+        f"/player/{user_id}/game/tile/{tile_id}/action",
+        data={"action": "inspect"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert b"surroundings" in response.data.lower() or b"examine" in response.data.lower()
+
+
+# Test game_over when playerclass is None
+def test_game_over_no_class(client, authenticated_user):
+    """Test game_over when player has no class."""
+    user_id = authenticated_user
+
+    with client.application.app_context():
+        user = db.session.get(User, user_id)
+        user.hitpoints = 0
+        user.playerclass = None
+        db.session.commit()
+
+    response = client.get(f"/player/{user_id}/gameover")
+
+    assert response.status_code == 200
+    assert b"Unknown" in response.data
+
+
+# Test game_over when playerrace is None
+def test_game_over_no_race(client, authenticated_user, setup_game_data):
+    """Test game_over when player has no race."""
+    user_id = authenticated_user
+
+    with client.application.app_context():
+        user = db.session.get(User, user_id)
+        player_class = PlayerClass.query.first()
+        user.playerclass = player_class.id
+        user.playerrace = None
+        db.session.commit()
+
+    response = client.get(f"/player/{user_id}/gameover")
+
+    assert response.status_code == 200
+    assert b"Unknown" in response.data
+
+
+# Test restart_game with GET method
+def test_restart_game_get_method(client, authenticated_user):
+    """Test restart_game with GET method."""
+    user_id = authenticated_user
+
+    response = client.get(f"/player/{user_id}/restart")
+
+    # Should still work (route accepts GET and POST)
+    assert response.status_code in [200, 302]
+
+
+# Test get_tile with no tile for user in active playthrough
+def test_get_tile_no_tile_in_playthrough(client, authenticated_user, setup_game_data):
+    """Test get_tile when playthrough exists but no tiles."""
+    user_id = authenticated_user
+
+    with client.application.app_context():
+        user = db.session.get(User, user_id)
+        player_class = PlayerClass.query.first()
+        player_race = PlayerRace.query.first()
+        user.playerclass = player_class.id
+        user.playerrace = player_race.id
+
+        # Create playthrough but no tiles
+        play = Playthrough(user_id=user_id)
+        db.session.add(play)
+        db.session.commit()
+
+    response = client.get(f"/player/{user_id}/play", follow_redirects=False)
+
+    # Should redirect to setup
+    assert response.status_code == 302
+    assert "setup" in response.location
+
+
+# Test get_tile with scene tile type (different from sign/treasure/monster)
+def test_get_tile_scene_type_actions(client, user_with_character):
+    """Test get_tile allows all actions for scene tile."""
+    user_id = user_with_character["user_id"]
+    tile_id = user_with_character["tile_id"]
+
+    with client.application.app_context():
+        tile = db.session.get(Tile, tile_id)
+        scene_type = TileTypeOption.query.filter_by(name="scene").first()
+        tile.type = scene_type.id
+        db.session.commit()
+
+    response = client.get(f"/player/{user_id}/play")
+
+    assert response.status_code == 200
+    # Scene tiles should allow all actions including fight
+    assert b"fight" in response.data
