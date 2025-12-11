@@ -5,3 +5,5 @@ Flask-WTF
 flask-login
 wtforms
 bs4
+python-dotenv
+Flask-Migrate

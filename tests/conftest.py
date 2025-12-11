@@ -1,17 +1,18 @@
 import pytest
-import warnings
-from pq_app import create_app, db
+from pq_app import create_app
+from pq_app.model import db
+
 
 
 @pytest.fixture
 def app():
     """Create and configure a test app instance."""
-    app = create_app()
+    app = create_app("testing")
     app.config.update(
         {
             "TESTING": True,
-            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",  # Use in-memory database
-            "WTF_CSRF_ENABLED": False,  # Disable CSRF for testing
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+            "WTF_CSRF_ENABLED": False,
         }
     )
 
@@ -19,10 +20,7 @@ def app():
         db.create_all()
         yield app
         db.session.remove()
-        # Suppress the SQLAlchemy warning about foreign key cycles
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=Warning)
-            db.drop_all()
+        db.drop_all()
 
 
 @pytest.fixture

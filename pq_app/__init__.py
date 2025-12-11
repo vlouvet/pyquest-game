@@ -1,31 +1,54 @@
-from .model import *
-from .userCharacter import *
-from .gameforms import *
-from .pqMonsters import *
-from .gameTile import *
-import random
 from flask import Flask
 from flask_login import LoginManager
 from . import model
+import os
+
 
 login_manager = LoginManager()
 
 
-def create_app():
+def create_app(config_name=None):
+    """
+    Application factory for PyQuest game.
+
+    Args:
+        config_name: Configuration to use (development, testing, production)
+
+    Returns:
+        Configured Flask application instance
+    """
     app = Flask(__name__)
-    app.config["SECRET_KEY"] = random.randbytes(24).hex()
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///pyquest_game.db"
+
+    # Load configuration
+    if config_name is None:
+        config_name = os.environ.get("APP_ENV", "development")
+
+    from config import config
+
+    app.config.from_object(config.get(config_name, config["default"]))
+
+    # Initialize extensions
     model.db.init_app(app)
     login_manager.init_app(app)
     login_manager.login_view = "main.login"
 
+    # Create database tables
+    # In development and testing we create tables and seed defaults automatically.
+    # In production environments, prefer running Alembic migrations instead.
     with app.app_context():
-        model.db.create_all()
-        model.init_defaults()
+        if config_name in ("development", "testing"):
+            model.db.create_all()
+            model.init_defaults()
 
-    # Register the blueprint
+    # Register blueprints
     from .app import main_bp
 
     app.register_blueprint(main_bp)
 
     return app
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    # Use Session.get to avoid legacy Query.get API
+    return model.db.session.get(model.User, int(user_id))

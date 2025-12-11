@@ -1,19 +1,52 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime, timezone
 
 db = SQLAlchemy()
 
 
-class User(db.Model, UserMixin):
+# Provide a concrete Model reference to satisfy static analyzers
+Model = db.Model
+
+
+class User(Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
     password_hash = db.Column(db.String(150), nullable=False)
     email = db.Column(db.String)
-    hitpoints = db.Column(db.Integer)
-    tiles = db.relationship("Tile", backref="user")
+    hitpoints = db.Column(db.Integer, default=100)
+    max_hp = db.Column(db.Integer, default=100)
+    strength = db.Column(db.Integer, default=10)
+    intelligence = db.Column(db.Integer, default=10)
+    stealth = db.Column(db.Integer, default=10)
+    exp_points = db.Column(db.Integer, default=0)
+    level = db.Column(db.Integer, default=1)
     playerclass = db.Column(db.Integer, db.ForeignKey("playerclass.id"))
     playerrace = db.Column(db.Integer, db.ForeignKey("playerrace.id"))
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    tiles = db.relationship("Tile", backref="user", lazy=True)
+    player_class_rel = db.relationship("PlayerClass", backref="users", foreign_keys=[playerclass])
+    player_race_rel = db.relationship("PlayerRace", backref="users", foreign_keys=[playerrace])
+
+    def __init__(
+        self,
+        username=None,
+        password_hash=None,
+        email=None,
+        hitpoints=None,
+        playerclass=None,
+        playerrace=None,
+    ):
+        self.username = username
+        self.password_hash = password_hash
+        self.email = email
+        if hitpoints is not None:
+            self.hitpoints = hitpoints
+        self.playerclass = playerclass
+        self.playerrace = playerrace
 
     def __init__(
         self, username=None, password_hash=None, email=None, hitpoints=None, playerclass=None, playerrace=None
@@ -29,18 +62,37 @@ class User(db.Model, UserMixin):
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
-        if self.password_hash is None:
+        # If there is no stored password hash, return False instead of passing None
+        if not self.password_hash:
             return False
         return check_password_hash(self.password_hash, password)
 
+    @property
+    def is_alive(self):
+        """Check if player is still alive"""
+        return self.hitpoints > 0
 
-class Tile(db.Model):
+    def take_damage(self, amount):
+        """Reduce hitpoints by damage amount, minimum 0"""
+        self.hitpoints = max(0, self.hitpoints - amount)
+
+    def heal(self, amount):
+        """Heal hitpoints, maximum max_hp"""
+        self.hitpoints = min(self.max_hp, self.hitpoints + amount)
+
+
+class Tile(Model):
     id = db.Column(db.Integer, primary_key=True)
     action_taken = db.Column(db.Boolean, default=False)
     type = db.Column(db.Integer, db.ForeignKey("tiletypeoption.id"), nullable=False)
     action = db.Column(db.Integer, db.ForeignKey("action.id"))
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
     content = db.Column(db.String)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    # Relationships - specify foreign_keys to resolve ambiguity
+    tile_type = db.relationship("TileTypeOption", foreign_keys=[type], backref="tiles")
+    tile_action = db.relationship("Action", foreign_keys=[action], backref="tiles")
 
     def __init__(self, user_id=None, type=None, action=None, content=None, action_taken=False):
         self.user_id = user_id
@@ -50,20 +102,28 @@ class Tile(db.Model):
         self.action_taken = action_taken
 
 
-class Action(db.Model):
+class Action(Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
-    tile = db.Column(db.Integer, db.ForeignKey("tile.id"))
+    tile = db.Column(db.Integer, db.ForeignKey("tile.id", use_alter=True, ondelete="CASCADE"))
     actionverb = db.Column(db.Integer, db.ForeignKey("actionoption.id"))
 
+    # Relationships - specify foreign_keys to avoid circular reference issues
+    tile_ref = db.relationship("Tile", foreign_keys=[tile], passive_deletes=True)
+    action_option = db.relationship("ActionOption", backref="actions")
 
-class ActionOption(db.Model):
+
+class ActionOption(Model):
     __tablename__ = "actionoption"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
+    code = db.Column(db.String, unique=True, nullable=True)
+
+    def __init__(self, name=None):
+        self.name = name
 
 
-class TileTypeOption(db.Model):
+class TileTypeOption(Model):
     __tablename__ = "tiletypeoption"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
@@ -72,30 +132,40 @@ class TileTypeOption(db.Model):
         self.name = name
 
 
-class PlayerClass(db.Model):
+class PlayerClass(Model):
     __tablename__ = "playerclass"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
 
+    def __init__(self, name=None):
+        self.name = name
 
-class PlayerRace(db.Model):
+
+class PlayerRace(Model):
     __tablename__ = "playerrace"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
+
+    def __init__(self, name=None):
+        self.name = name
+
+    def __repr__(self):
+        return f"<PlayerRace {self.name}>"
 
 
 def init_defaults():
     """pre-populate action options table"""
     if ActionOption.query.first() is None:
         action_options = [
-            {"name": "rest"},
-            {"name": "inspect"},
-            {"name": "fight"},
-            {"name": "quit"},
+            {"name": "rest", "code": "rest"},
+            {"name": "inspect", "code": "inspect"},
+            {"name": "fight", "code": "fight"},
+            {"name": "quit", "code": "quit"},
         ]
         for act_opt in action_options:
             current_act_opt = ActionOption()
             current_act_opt.name = act_opt["name"]
+            current_act_opt.code = act_opt.get("code")
             db.session.add(current_act_opt)
         db.session.commit()
     if TileTypeOption.query.first() is None:
