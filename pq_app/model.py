@@ -6,7 +6,11 @@ from datetime import datetime
 db = SQLAlchemy()
 
 
-class User(db.Model, UserMixin):
+# Provide a concrete Model reference to satisfy static analyzers
+Model = db.Model
+
+
+class User(Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
     password_hash = db.Column(db.String(150), nullable=False)
@@ -24,12 +28,8 @@ class User(db.Model, UserMixin):
 
     # Relationships
     tiles = db.relationship("Tile", backref="user", lazy=True)
-    player_class_rel = db.relationship(
-        "PlayerClass", backref="users", foreign_keys=[playerclass]
-    )
-    player_race_rel = db.relationship(
-        "PlayerRace", backref="users", foreign_keys=[playerrace]
-    )
+    player_class_rel = db.relationship("PlayerClass", backref="users", foreign_keys=[playerclass])
+    player_race_rel = db.relationship("PlayerRace", backref="users", foreign_keys=[playerrace])
 
     def __init__(
         self,
@@ -52,6 +52,9 @@ class User(db.Model, UserMixin):
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
+        # If there is no stored password hash, return False instead of passing None
+        if not self.password_hash:
+            return False
         return check_password_hash(self.password_hash, password)
 
     @property
@@ -67,11 +70,8 @@ class User(db.Model, UserMixin):
         """Heal hitpoints, maximum max_hp"""
         self.hitpoints = min(self.max_hp, self.hitpoints + amount)
 
-    def __repr__(self):
-        return f"<User {self.username}>"
 
-
-class Tile(db.Model):
+class Tile(Model):
     id = db.Column(db.Integer, primary_key=True)
     action_taken = db.Column(db.Boolean, default=False)
     type = db.Column(db.Integer, db.ForeignKey("tiletypeoption.id"), nullable=False)
@@ -84,20 +84,15 @@ class Tile(db.Model):
     tile_type = db.relationship("TileTypeOption", foreign_keys=[type], backref="tiles")
     tile_action = db.relationship("Action", foreign_keys=[action], backref="tiles")
 
-    def __init__(
-        self, user_id=None, type=None, action=None, content=None, action_taken=False
-    ):
+    def __init__(self, user_id=None, type=None, action=None, content=None, action_taken=False):
         self.user_id = user_id
         self.type = type
         self.action = action
         self.content = content
         self.action_taken = action_taken
 
-    def __repr__(self):
-        return f"<Tile {self.id}: Type {self.type} for User {self.user_id}>"
 
-
-class Action(db.Model):
+class Action(Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
     tile = db.Column(db.Integer, db.ForeignKey("tile.id"))
@@ -107,11 +102,8 @@ class Action(db.Model):
     tile_ref = db.relationship("Tile", foreign_keys=[tile])
     action_option = db.relationship("ActionOption", backref="actions")
 
-    def __repr__(self):
-        return f"<Action {self.name}>"
 
-
-class ActionOption(db.Model):
+class ActionOption(Model):
     __tablename__ = "actionoption"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
@@ -119,11 +111,8 @@ class ActionOption(db.Model):
     def __init__(self, name=None):
         self.name = name
 
-    def __repr__(self):
-        return f"<ActionOption {self.name}>"
 
-
-class TileTypeOption(db.Model):
+class TileTypeOption(Model):
     __tablename__ = "tiletypeoption"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
@@ -131,11 +120,8 @@ class TileTypeOption(db.Model):
     def __init__(self, name=None):
         self.name = name
 
-    def __repr__(self):
-        return f"<TileTypeOption {self.name}>"
 
-
-class PlayerClass(db.Model):
+class PlayerClass(Model):
     __tablename__ = "playerclass"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
@@ -143,11 +129,8 @@ class PlayerClass(db.Model):
     def __init__(self, name=None):
         self.name = name
 
-    def __repr__(self):
-        return f"<PlayerClass {self.name}>"
 
-
-class PlayerRace(db.Model):
+class PlayerRace(Model):
     __tablename__ = "playerrace"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)

@@ -5,7 +5,6 @@
 # import pytest
 import pytest
 from werkzeug.security import generate_password_hash
-from pq_app import create_app
 from pq_app.model import (
     User,
     db,
@@ -14,7 +13,6 @@ from pq_app.model import (
     Tile,
     TileTypeOption,
     ActionOption,
-    Action,
 )
 
 
@@ -29,9 +27,7 @@ def test_home_redirect(client):
 def setup_test_user(client):
     """Fixture to add a test user to the database."""
     with client.application.app_context():
-        user = User(
-            username="testuser", password_hash=generate_password_hash("testpassword")
-        )
+        user = User(username="testuser", password_hash=generate_password_hash("testpassword"))
         db.session.add(user)
         db.session.commit()
 
@@ -51,9 +47,7 @@ def test_login_post_success(client, setup_test_user):
         follow_redirects=True,
     )
     assert response.status_code == 200
-    assert (
-        b'<input type=submit value="Setup">' in response.data
-    )  # Replace with the expected greeting message
+    assert b'<input type=submit value="Setup">' in response.data  # Replace with the expected greeting message
 
 
 def test_login_post_failure(client):
@@ -113,9 +107,7 @@ def test_logout(client, setup_test_user):
 def authenticated_user(client):
     """Fixture to create and login a test user."""
     with client.application.app_context():
-        user = User(
-            username="authuser", password_hash=generate_password_hash("password123")
-        )
+        user = User(username="authuser", password_hash=generate_password_hash("password123"))
         db.session.add(user)
         db.session.commit()
         user_id = user.id
@@ -182,6 +174,9 @@ def test_setup_char_post(client, authenticated_user, setup_game_data):
     with client.application.app_context():
         player_class = PlayerClass.query.first()
         player_race = PlayerRace.query.first()
+        # Ensure fixtures exist for type checkers and runtime
+        assert player_class is not None
+        assert player_race is not None
 
     response = client.post(
         f"/player/{authenticated_user}/setup",
@@ -196,6 +191,8 @@ def test_setup_char_post(client, authenticated_user, setup_game_data):
     # Verify user was updated
     with client.application.app_context():
         user = User.query.get(authenticated_user)
+        # Ensure user exists
+        assert user is not None
         assert user.playerclass == player_class.id
         assert user.playerrace == player_race.id
 
@@ -229,6 +226,12 @@ def user_with_character(client, authenticated_user, setup_game_data):
         player_race = PlayerRace.query.first()
         tile_type = TileTypeOption.query.first()
 
+        # Ensure query results exist for static analysis and runtime
+        assert user is not None
+        assert player_class is not None
+        assert player_race is not None
+        assert tile_type is not None
+
         user.playerclass = player_class.id
         user.playerrace = player_race.id
         user.hitpoints = 100
@@ -261,27 +264,31 @@ def test_get_tile_unauthorized(client, user_with_character):
 def test_tile_type_content_generation(client, user_with_character):
     """Test that tile content is generated based on tile type."""
     user_id = user_with_character["user_id"]
-    
+
     # Test different tile types
     with client.application.app_context():
         tile = Tile.query.filter_by(user_id=user_id).first()
-        
+        assert tile is not None
+
         # Test scene tile
         scene_type = TileTypeOption.query.filter_by(name="scene").first()
+        assert scene_type is not None
         tile.type = scene_type.id
         db.session.commit()
-        
+
     response = client.get(f"/player/{user_id}/play")
     assert response.status_code == 200
     assert b"This is a scene tile" in response.data
-    
+
     # Test monster tile
     with client.application.app_context():
         tile = Tile.query.filter_by(user_id=user_id).first()
+        assert tile is not None
         monster_type = TileTypeOption.query.filter_by(name="monster").first()
+        assert monster_type is not None
         tile.type = monster_type.id
         db.session.commit()
-        
+
     response = client.get(f"/player/{user_id}/play")
     assert response.status_code == 200
     # Monster name should appear (generated from NPCMonster)
@@ -300,6 +307,7 @@ def test_execute_tile_action(client, user_with_character):
 
     with client.application.app_context():
         action = ActionOption.query.first()
+        assert action is not None
         action_id = action.id
 
     response = client.post(
@@ -312,6 +320,7 @@ def test_execute_tile_action(client, user_with_character):
     # Verify tile was marked as actioned
     with client.application.app_context():
         tile = Tile.query.get(tile_id)
+        assert tile is not None
         assert tile.action_taken is True
 
 
@@ -335,6 +344,7 @@ def test_generate_tile(client, user_with_character):
     # First mark the current tile as actioned
     with client.application.app_context():
         tile = Tile.query.get(tile_id)
+        assert tile is not None
         tile.action_taken = True
         db.session.commit()
 
@@ -384,6 +394,7 @@ def test_game_over_when_hp_zero(client, user_with_character):
     # Test the is_alive property and take_damage method
     with client.application.app_context():
         user = User.query.get(user_id)
+        assert user is not None
 
         # User should be alive initially
         assert user.is_alive
@@ -408,6 +419,7 @@ def test_game_over_route(client, user_with_character):
     # Set player to dead
     with client.application.app_context():
         user = User.query.get(user_id)
+        assert user is not None
         user.hitpoints = 0
         db.session.commit()
 
@@ -440,6 +452,7 @@ def test_heal_respects_max_hp(client, user_with_character):
     # Set player HP to max
     with client.application.app_context():
         user = User.query.get(user_id)
+        assert user is not None
         user.hitpoints = user.max_hp
         db.session.commit()
 
@@ -455,6 +468,7 @@ def test_heal_respects_max_hp(client, user_with_character):
     # Verify HP didn't exceed max
     with client.application.app_context():
         user = User.query.get(user_id)
+        assert user is not None
         assert user.hitpoints == user.max_hp
         assert user.hitpoints <= 100
 
@@ -463,23 +477,25 @@ def test_inspect_action(client, user_with_character):
     """Test that inspect action works correctly."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     # Get inspect action ID
     with client.application.app_context():
         inspect_action = ActionOption.query.filter_by(name="inspect").first()
+        assert inspect_action is not None
         action_id = inspect_action.id
-    
+
     response = client.post(
         f"/player/{user_id}/game/tile/{tile_id}/action",
         data={"action": action_id},
         follow_redirects=True,
     )
-    
+
     assert response.status_code == 200
-    
+
     # Verify tile was actioned and inspect was processed
     with client.application.app_context():
         tile = Tile.query.get(tile_id)
+        assert tile is not None
         assert tile.action_taken is True
         assert tile.action == action_id  # Action ID was saved
 
@@ -488,22 +504,24 @@ def test_quit_action(client, user_with_character):
     """Test that quit action works correctly."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     # Get quit action ID
     with client.application.app_context():
         quit_action = ActionOption.query.filter_by(name="quit").first()
+        assert quit_action is not None
         action_id = quit_action.id
-    
+
     response = client.post(
         f"/player/{user_id}/game/tile/{tile_id}/action",
         data={"action": action_id},
         follow_redirects=True,
     )
-    
+
     assert response.status_code == 200
-    
+
     # Verify tile was actioned and quit was processed
     with client.application.app_context():
         tile = Tile.query.get(tile_id)
+        assert tile is not None
         assert tile.action_taken is True
         assert tile.action == action_id  # Action ID was saved

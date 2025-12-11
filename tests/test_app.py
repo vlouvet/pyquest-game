@@ -1,8 +1,6 @@
 # test_app.py
 import pytest
 from pq_app import create_app
-from bs4 import BeautifulSoup
-from flask import url_for
 from pq_app.model import db, User, Tile, TileTypeOption
 
 
