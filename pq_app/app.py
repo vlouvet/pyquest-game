@@ -120,6 +120,19 @@ def setup_char(player_id):
             current_tile.user_id = user_profile_id
             current_tile.type = tile_type["id"]
             current_tile.playthrough_id = new_play.id
+            
+            # Generate and save content to database based on tile type
+            tile_config = gameTile.pqGameTile()
+            if tile_type["name"] == "sign":
+                current_tile.content = tile_config.generate_signpost()
+            elif tile_type["name"] == "monster":
+                monster = pqMonsters.NPCMonster()
+                current_tile.content = f"{monster.name} ({monster.hitpoints} HP)"
+            elif tile_type["name"] == "scene":
+                current_tile.content = "This is a scene tile"
+            elif tile_type["name"] == "treasure":
+                current_tile.content = "This is a treasure tile"
+            
             model.db.session.add(current_tile)
         form = gameforms.TileForm()
         form.type.data = tile_type["name"]
@@ -217,9 +230,22 @@ def get_tile(player_id):
             .order_by(model.ActionOption.name)
         ]
         return render_template("gameTile.html", player_char=user_profile, form=form, readonly=True)
+    
+    # Filter available actions based on tile type
+    all_actions = model.ActionOption.query.order_by(model.ActionOption.name).all()
+    if form.type.data == "sign":
+        # Sign tiles only allow rest, inspect, and quit
+        allowed_actions = [a for a in all_actions if a.name in ["rest", "inspect", "quit"]]
+    elif form.type.data == "treasure":
+        # Treasure tiles disable fight
+        allowed_actions = [a for a in all_actions if a.name != "fight"]
+    else:
+        # Other tile types (monster, scene) allow all actions
+        allowed_actions = all_actions
+    
     form.action.choices = [
         (tileaction.code or str(tileaction.id), tileaction.name)
-        for tileaction in model.ActionOption.query.order_by(model.ActionOption.name)
+        for tileaction in allowed_actions
     ]
     return render_template("gameTile.html", player_char=user_profile, form=form)
 
@@ -258,6 +284,22 @@ def generate_tile(player_id):
     # preserve playthrough from previous tile when generating the next tile
     current_tile.playthrough_id = tile_record.playthrough_id
 
+    # Generate and save content based on tile type
+    tile_config = gameTile.pqGameTile()
+    tile_type_obj = model.db.session.get(model.TileTypeOption, current_tile.type)
+    tile_type_name = tile_type_obj.name if tile_type_obj else None
+    
+    if tile_type_name == "sign":
+        current_tile.content = tile_config.generate_signpost()
+    elif tile_type_name == "monster":
+        monster = pqMonsters.NPCMonster()
+        # Save monster name with HP in parentheses
+        current_tile.content = f"{monster.name} ({monster.hitpoints} HP)"
+    elif tile_type_name == "scene":
+        current_tile.content = "This is a scene tile"
+    elif tile_type_name == "treasure":
+        current_tile.content = "This is a treasure tile"
+
     model.db.session.add(current_tile)
     model.db.session.commit()
 
@@ -265,11 +307,24 @@ def generate_tile(player_id):
     tile_details = gameforms.TileForm(obj=current_tile)
     # populate the hidden/read-only tile id into the field data so templates can read it
     tile_details.tileid.data = str(current_tile.id)
-    tile_type_obj = model.db.session.get(model.TileTypeOption, current_tile.type)
-    tile_details.type.data = tile_type_obj.name if tile_type_obj else None
+    tile_details.type.data = tile_type_name
+    tile_details.content.data = current_tile.content
+    
+    # Filter available actions based on tile type (same as get_tile)
+    all_actions = model.ActionOption.query.order_by(model.ActionOption.name).all()
+    if tile_details.type.data == "sign":
+        # Sign tiles only allow rest, inspect, and quit
+        allowed_actions = [a for a in all_actions if a.name in ["rest", "inspect", "quit"]]
+    elif tile_details.type.data == "treasure":
+        # Treasure tiles disable fight
+        allowed_actions = [a for a in all_actions if a.name != "fight"]
+    else:
+        # Other tile types (monster, scene) allow all actions
+        allowed_actions = all_actions
+    
     tile_details.action.choices = [
         (tileaction.code or str(tileaction.id), tileaction.name)
-        for tileaction in model.ActionOption.query.order_by(model.ActionOption.name)
+        for tileaction in allowed_actions
     ]
 
     return render_template("gameTile.html", player_char=user_profile, form=tile_details)
@@ -292,7 +347,8 @@ def start_journey(player_id):
     model.db.session.add(new_play)
     model.db.session.flush()
 
-    # create first tile
+    # create first tile with content
+    tile_config = gameTile.pqGameTile()
     tile_type_list = [
         {"name": tile_type.name, "id": tile_type.id} for tile_type in model.TileTypeOption.query.order_by(model.TileTypeOption.name)
     ]
@@ -300,6 +356,21 @@ def start_journey(player_id):
     current_tile.type = random.choice(tile_type_list)["id"]
     current_tile.user_id = player_id
     current_tile.playthrough_id = new_play.id
+    
+    # Generate and save content to database based on tile type
+    tile_type_obj = model.db.session.get(model.TileTypeOption, current_tile.type)
+    tile_type_name = tile_type_obj.name if tile_type_obj else None
+    
+    if tile_type_name == "sign":
+        current_tile.content = tile_config.generate_signpost()
+    elif tile_type_name == "monster":
+        monster = pqMonsters.NPCMonster()
+        current_tile.content = f"{monster.name} ({monster.hitpoints} HP)"
+    elif tile_type_name == "scene":
+        current_tile.content = "This is a scene tile"
+    elif tile_type_name == "treasure":
+        current_tile.content = "This is a treasure tile"
+    
     model.db.session.add(current_tile)
     model.db.session.commit()
 
@@ -374,10 +445,21 @@ def execute_tile_action(playerid, tile_id):
 
         # Apply action semantics and capture a short result message
         action_result = None
+        tile_type = model.db.session.get(model.TileTypeOption, tile_record.type)
+        tile_type_name = tile_type.name if tile_type else None
+        
         if action_name == "rest":
-            player_record.heal(10)
-            action_result = "You rest and recover 10 HP."
-            flash(action_result)
+            # Check if resting on a monster tile
+            if tile_type_name == "monster":
+                # Lose 50% of HP or 10 HP, whichever is greater
+                damage = max(int(player_record.hitpoints * 0.5), 10)
+                player_record.take_damage(damage)
+                action_result = f"Resting near a monster is dangerous! You lost {damage} HP."
+                flash(action_result)
+            else:
+                player_record.heal(10)
+                action_result = "You rest and recover 10 HP."
+                flash(action_result)
 
         elif action_name == "fight":
             damage = random.randint(5, 20)
@@ -386,11 +468,17 @@ def execute_tile_action(playerid, tile_id):
             flash(action_result)
 
         elif action_name == "inspect":
-            tile_type = model.db.session.get(model.TileTypeOption, tile_record.type)
-            if tile_type and tile_type.name == "monster":
+            if tile_type_name == "monster":
                 action_result = "You carefully observe the creature, learning its patterns."
-            elif tile_type and tile_type.name == "treasure":
-                action_result = "You inspect the area and find hints of treasure nearby."
+            elif tile_type_name == "treasure":
+                # 1% chance to restore all HP
+                if random.randint(1, 100) == 1:
+                    max_hp = 100  # Assuming max HP is 100
+                    healed = max_hp - player_record.hitpoints
+                    player_record.hitpoints = max_hp
+                    action_result = f"You found a magical healing artifact! Restored {healed} HP to full health!"
+                else:
+                    action_result = "You inspect the area and find hints of treasure nearby."
             else:
                 action_result = "You take a moment to examine your surroundings carefully."
             flash(action_result)
