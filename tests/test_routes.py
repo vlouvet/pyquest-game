@@ -258,6 +258,41 @@ def test_get_tile_unauthorized(client, user_with_character):
     assert response.status_code == 403
 
 
+def test_tile_type_content_generation(client, user_with_character):
+    """Test that tile content is generated based on tile type."""
+    user_id = user_with_character["user_id"]
+    
+    # Test different tile types
+    with client.application.app_context():
+        tile = Tile.query.filter_by(user_id=user_id).first()
+        
+        # Test scene tile
+        scene_type = TileTypeOption.query.filter_by(name="scene").first()
+        tile.type = scene_type.id
+        db.session.commit()
+        
+    response = client.get(f"/player/{user_id}/play")
+    assert response.status_code == 200
+    assert b"This is a scene tile" in response.data
+    
+    # Test monster tile
+    with client.application.app_context():
+        tile = Tile.query.filter_by(user_id=user_id).first()
+        monster_type = TileTypeOption.query.filter_by(name="monster").first()
+        tile.type = monster_type.id
+        db.session.commit()
+        
+    response = client.get(f"/player/{user_id}/play")
+    assert response.status_code == 200
+    # Monster name should appear (generated from NPCMonster)
+    assert (
+        b"elephant" in response.data
+        or b"giraffe" in response.data
+        or b"gryffon" in response.data
+        or b"dragon" in response.data
+    )
+
+
 def test_execute_tile_action(client, user_with_character):
     """Test executing an action on a tile."""
     user_id = user_with_character["user_id"]
@@ -422,3 +457,53 @@ def test_heal_respects_max_hp(client, user_with_character):
         user = User.query.get(user_id)
         assert user.hitpoints == user.max_hp
         assert user.hitpoints <= 100
+
+
+def test_inspect_action(client, user_with_character):
+    """Test that inspect action works correctly."""
+    user_id = user_with_character["user_id"]
+    tile_id = user_with_character["tile_id"]
+    
+    # Get inspect action ID
+    with client.application.app_context():
+        inspect_action = ActionOption.query.filter_by(name="inspect").first()
+        action_id = inspect_action.id
+    
+    response = client.post(
+        f"/player/{user_id}/game/tile/{tile_id}/action",
+        data={"action": action_id},
+        follow_redirects=True,
+    )
+    
+    assert response.status_code == 200
+    
+    # Verify tile was actioned and inspect was processed
+    with client.application.app_context():
+        tile = Tile.query.get(tile_id)
+        assert tile.action_taken is True
+        assert tile.action == action_id  # Action ID was saved
+
+
+def test_quit_action(client, user_with_character):
+    """Test that quit action works correctly."""
+    user_id = user_with_character["user_id"]
+    tile_id = user_with_character["tile_id"]
+    
+    # Get quit action ID
+    with client.application.app_context():
+        quit_action = ActionOption.query.filter_by(name="quit").first()
+        action_id = quit_action.id
+    
+    response = client.post(
+        f"/player/{user_id}/game/tile/{tile_id}/action",
+        data={"action": action_id},
+        follow_redirects=True,
+    )
+    
+    assert response.status_code == 200
+    
+    # Verify tile was actioned and quit was processed
+    with client.application.app_context():
+        tile = Tile.query.get(tile_id)
+        assert tile.action_taken is True
+        assert tile.action == action_id  # Action ID was saved

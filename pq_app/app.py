@@ -80,6 +80,10 @@ def setup_char(player_id):
         abort(403)
 
     user_profile = model.User.query.get_or_404(player_id)
+    
+    # Check if player is dead (except during restart)
+    if user_profile.hitpoints <= 0 and user_profile.playerclass:
+        return redirect(url_for("main.game_over", player_id=player_id))
     user_profile_id = user_profile.id
     form = gameforms.CharacterForm(obj=user_profile)
     form.charclass.choices = [
@@ -127,6 +131,10 @@ def char_start(id):
         abort(403)
     # TODO: query db to get user profile
     user_profile = model.User.query.get_or_404(id)
+    
+    # Check if player is dead
+    if not user_profile.is_alive:
+        return redirect(url_for("main.game_over", player_id=id))
     char_message = (
         "This is a test message to be displayed when the player first starts the game"
     )
@@ -160,14 +168,14 @@ def get_tile(player_id):
     form.tileid = tile_details.id
     # set the form type data to the name value from the TileTypeOption table using tile_details.type as a foreign key
     form.type.data = model.TileTypeOption.query.get(tile_details.type)
-    if form.type.data == "sign":
+    if form.type.data and form.type.data.name == "sign":
         form.content.data = tile_config.generate_signpost()
-    if form.type.data == "monster":
+    elif form.type.data and form.type.data.name == "monster":
         monster = pqMonsters.NPCMonster()
         form.content.data = monster.name
-    if form.type.data == "scene":
+    elif form.type.data and form.type.data.name == "scene":
         form.content.data = "This is a scene tile"
-    if form.type.data == "treasure":
+    elif form.type.data and form.type.data.name == "treasure":
         form.content.data = "This is a treasure tile"
     # if the tile_details exists check if action taken
     # if tile action_taken is not null, render the tile details in read only form
@@ -273,18 +281,46 @@ def execute_tile_action(playerid, tile_id):
         # handle rest
         player_record = model.User.query.get(playerid)
         print(f"Player_id: {player_record.id}")
+        
+        # Get action names from database instead of hardcoding IDs
+        action_option = model.ActionOption.query.get(action_type_ID)
+        action_name = action_option.name if action_option else "unknown"
 
-        if action_type_ID == 1:  # if requested action is to rest..
-            tile_record.action = 1
-            player_record.heal(10)  # Use heal method to respect max_hp
+        if action_name == "rest":
+            tile_record.action = action_type_ID
+            player_record.heal(10)
             flash("You rest and recover 10 HP.")
 
-        elif action_type_ID == 3:  # if requested action is to fight..
-            tile_record.action = 3  # save the action to the tile
+        elif action_name == "fight":
+            tile_record.action = action_type_ID
             # Simple combat: player takes random damage
             damage = random.randint(5, 20)
             player_record.take_damage(damage)
             flash(f"You fought bravely and took {damage} damage!")
+            
+        elif action_name == "inspect":
+            tile_record.action = action_type_ID
+            # Get tile type for contextual message
+            tile_type = model.TileTypeOption.query.get(tile_record.type)
+            if tile_type and tile_type.name == "monster":
+                flash("You carefully observe the creature, learning its patterns.")
+            elif tile_type and tile_type.name == "treasure":
+                flash("You inspect the area and find hints of treasure nearby.")
+            else:
+                flash("You take a moment to examine your surroundings carefully.")
+                
+        elif action_name == "quit":
+            tile_record.action = action_type_ID
+            flash("You decide to retreat from this challenge.")
+
+        # Create Action record for history tracking
+        if not action_record:
+            new_action = model.Action(
+                name=action_name,
+                tile=tile_id,
+                actionverb=action_type_ID
+            )
+            model.db.session.add(new_action)
 
         tile_record.user_id = player_record.id
         tile_record.action_taken = True
@@ -380,6 +416,8 @@ def restart_game(player_id):
     user_profile.hitpoints = user_profile.max_hp
     user_profile.exp_points = 0
     user_profile.level = 1
+    user_profile.playerclass = None
+    user_profile.playerrace = None
 
     # Delete all old tiles
     model.Tile.query.filter_by(user_id=player_id).delete()
