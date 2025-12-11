@@ -4,7 +4,6 @@ Revision ID: 0006_add_combat_encounter_media_tables
 Revises: 0005_add_ascii_art
 Create Date: 2025-12-11 00:00:00.000000
 """
-
 from alembic import op
 import sqlalchemy as sa
 

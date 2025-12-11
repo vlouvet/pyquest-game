@@ -10,6 +10,7 @@ from flask_login import (
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import model, gameforms, pqMonsters, gameTile
 from .services import CombatService, TileService, MediaService
+from .services import CombatService, TileService, MediaService
 
 # Create Blueprint
 main_bp = Blueprint("main", __name__)
@@ -169,6 +170,7 @@ def char_start(id):
 @login_required
 def get_tile(player_id):
     """Display the current tile for a player"""
+    """Display the current tile for a player"""
     # Authorization check
     if current_user.id != player_id:
         abort(403)
@@ -192,6 +194,7 @@ def get_tile(player_id):
         return redirect(url_for("main.greet_user"))
 
     # Get the most recent tile from the active playthrough
+    tile_details = tile_service.get_latest_tile(player_id, active_playthrough.id)
     tile_details = tile_service.get_latest_tile(player_id, active_playthrough.id)
     if not tile_details:
         flash("No tile found for this player; please set up your character or generate a tile.")
@@ -239,6 +242,7 @@ def get_tile(player_id):
 @main_bp.route("/player/<int:player_id>/game/tile/next", methods=["POST", "GET"])
 @login_required
 def generate_tile(player_id):
+    """Generate the next tile for a player"""
     """Generate the next tile for a player"""
     # Authorization check
     if current_user.id != player_id:
@@ -303,6 +307,7 @@ def generate_tile(player_id):
     tile_details = gameforms.TileForm(obj=current_tile)
     tile_details.tileid.data = str(current_tile.id)
     tile_details.type.data = tile_data.tile_type_name
+    tile_details.type.data = tile_data.tile_type_name
     tile_details.content.data = current_tile.content
     # Filter available actions based on tile type (same as get_tile)
     all_actions = model.ActionOption.query.order_by(model.ActionOption.name).all()
@@ -326,6 +331,7 @@ def generate_tile(player_id):
 @main_bp.route("/player/<int:player_id>/start_journey", methods=["POST"])
 @login_required
 def start_journey(player_id):
+    """Start a new journey/playthrough for a player"""
     """Start a new journey/playthrough for a player"""
     # Authorization check
     if current_user.id != player_id:
@@ -374,6 +380,7 @@ def start_journey(player_id):
 @login_required
 def execute_tile_action(playerid, tile_id):
     """Execute an action on a tile using CombatService"""
+    """Execute an action on a tile using CombatService"""
     # Authorization check
     if current_user.id != playerid:
         abort(403)
@@ -382,6 +389,7 @@ def execute_tile_action(playerid, tile_id):
     if request.method != "POST":
         return {"status_code": 402}
 
+    # Detect AJAX/JSON requests - only check X-Requested-With header for stricter detection
     # Detect AJAX/JSON requests - only check X-Requested-With header for stricter detection
     is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
@@ -415,7 +423,23 @@ def execute_tile_action(playerid, tile_id):
                 if is_ajax:
                     return jsonify(error=error_msg), 400
                 abort(400, description=error_msg)
+        tile_record = combat_service.get_tile_with_lock(tile_id)
 
+        # Validate tile
+        is_valid, error_msg = combat_service.validate_tile_action(tile_record)
+        if not is_valid:
+            if error_msg == "Tile already actioned":
+                # Redirect to get_tile to show the tile in readonly mode
+                if is_ajax:
+                    return jsonify(redirect=url_for("main.get_tile", player_id=playerid)), 200
+                return redirect(url_for("main.get_tile", player_id=playerid))
+            else:
+                # Tile not found or other error
+                if is_ajax:
+                    return jsonify(error=error_msg), 400
+                abort(400, description=error_msg)
+
+        # Get player
         # Get player
         player_record = model.db.session.get(model.User, playerid)
         if not player_record:
@@ -423,6 +447,7 @@ def execute_tile_action(playerid, tile_id):
                 return jsonify(error="Player not found"), 400
             abort(400, description="Player not found")
 
+        # Get tile type
         # Get tile type
         tile_type = model.db.session.get(model.TileTypeOption, tile_record.type)
         tile_type_name = tile_type.name if tile_type else None
@@ -451,8 +476,10 @@ def execute_tile_action(playerid, tile_id):
             )
 
     # Transaction committed here
+    # Transaction committed here
 
     # Check if player is still alive after action
+    if not combat_result.player_alive:
     if not combat_result.player_alive:
         if is_ajax:
             return jsonify(error="You have fallen in battle..."), 200
@@ -460,6 +487,7 @@ def execute_tile_action(playerid, tile_id):
         return redirect(url_for("main.game_over", player_id=playerid))
 
     # If the player chose to quit, end the journey and return to the main/dashboard
+    if combat_result.should_end_playthrough:
     if combat_result.should_end_playthrough:
         if is_ajax:
             return jsonify(ok=True, redirect=url_for("main.greet_user"))

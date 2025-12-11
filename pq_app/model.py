@@ -162,9 +162,12 @@ class TileTypeOption(Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
     ascii_art = db.Column(db.Text, nullable=True)
+    ascii_art = db.Column(db.Text, nullable=True)
 
     def __init__(self, name=None, ascii_art=None):
+    def __init__(self, name=None, ascii_art=None):
         self.name = name
+        self.ascii_art = ascii_art
         self.ascii_art = ascii_art
 
 
@@ -348,6 +351,7 @@ class TileMedia(Model):
 
 def init_defaults():
     """pre-populate action options and combat actions tables"""
+    """pre-populate action options and combat actions tables"""
     if ActionOption.query.first() is None:
         action_options = [
             {"name": "rest", "code": "rest"},
@@ -376,6 +380,11 @@ def init_defaults():
         db.session.commit()
 
     if PlayerClass.query.first() is None:
+        player_classes = [{"name": "witch"}, {"name": "fighter"}, {"name": "healer"}]
+        for pc in player_classes:
+            current_class = PlayerClass()
+            current_class.name = pc["name"]
+            db.session.add(current_class)
         player_classes = [{"name": "witch"}, {"name": "fighter"}, {"name": "healer"}]
         for pc in player_classes:
             current_class = PlayerClass()
