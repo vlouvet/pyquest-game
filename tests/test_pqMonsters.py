@@ -92,4 +92,3 @@ def test_do_attack_default_player_name_and_missing_attributes(monkeypatch, capsy
     assert "attacks player for" in captured.out
     # hitpoints attribute should be present after attack
     assert hasattr(player, "hitpoints")
-

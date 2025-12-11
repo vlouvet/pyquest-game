@@ -74,7 +74,9 @@ def greet_user():
         # If no active playthrough, present dashboard allowing user to start a new journey
         user_tiles_exist = model.Tile.query.filter_by(user_id=current_user.id).first() is not None
         start_form = gameforms.RestartForm()
-        return render_template("dashboard.html", player_char=current_user, has_tiles=user_tiles_exist, start_form=start_form)
+        return render_template(
+            "dashboard.html", player_char=current_user, has_tiles=user_tiles_exist, start_form=start_form
+        )
     else:
         # User needs character setup
         return redirect(url_for("main.setup_char", player_id=current_user.id))
@@ -120,7 +122,7 @@ def setup_char(player_id):
             current_tile.user_id = user_profile_id
             current_tile.type = tile_type["id"]
             current_tile.playthrough_id = new_play.id
-            
+
             # Generate and save content to database based on tile type
             tile_config = gameTile.pqGameTile()
             if tile_type["name"] == "sign":
@@ -132,7 +134,7 @@ def setup_char(player_id):
                 current_tile.content = "This is a scene tile"
             elif tile_type["name"] == "treasure":
                 current_tile.content = "This is a treasure tile"
-            
+
             model.db.session.add(current_tile)
         form = gameforms.TileForm()
         form.type.data = tile_type["name"]
@@ -184,20 +186,24 @@ def get_tile(player_id):
 
     tile_config = gameTile.pqGameTile()
     # Find the active playthrough (where ended_at is NULL)
-    active_playthrough = model.Playthrough.query.filter_by(
-        user_id=player_id, ended_at=None
-    ).order_by(model.Playthrough.started_at.desc()).first()
-    
+    active_playthrough = (
+        model.Playthrough.query.filter_by(user_id=player_id, ended_at=None)
+        .order_by(model.Playthrough.started_at.desc())
+        .first()
+    )
+
     if not active_playthrough:
         # No active journey; redirect to dashboard to start a new one
         flash("No active journey found. Please start a new journey.")
         return redirect(url_for("main.greet_user"))
-    
+
     # Get the most recent tile from the active playthrough
-    tile_details = model.Tile.query.filter_by(
-        user_id=player_id, playthrough_id=active_playthrough.id
-    ).order_by(model.Tile.id.desc()).first()
-    
+    tile_details = (
+        model.Tile.query.filter_by(user_id=player_id, playthrough_id=active_playthrough.id)
+        .order_by(model.Tile.id.desc())
+        .first()
+    )
+
     if not tile_details:
         # No tile found for this player in active playthrough; redirect to setup
         flash("No tile found for this player; please set up your character or generate a tile.")
@@ -230,7 +236,7 @@ def get_tile(player_id):
             .order_by(model.ActionOption.name)
         ]
         return render_template("gameTile.html", player_char=user_profile, form=form, readonly=True)
-    
+
     # Filter available actions based on tile type
     all_actions = model.ActionOption.query.order_by(model.ActionOption.name).all()
     if form.type.data == "sign":
@@ -242,11 +248,8 @@ def get_tile(player_id):
     else:
         # Other tile types (monster, scene) allow all actions
         allowed_actions = all_actions
-    
-    form.action.choices = [
-        (tileaction.code or str(tileaction.id), tileaction.name)
-        for tileaction in allowed_actions
-    ]
+
+    form.action.choices = [(tileaction.code or str(tileaction.id), tileaction.name) for tileaction in allowed_actions]
     return render_template("gameTile.html", player_char=user_profile, form=form)
 
 
@@ -275,7 +278,8 @@ def generate_tile(player_id):
 
     # At this point the previous tile was actioned; generate a fresh tile for the player (GET)
     tile_type_list = [
-        {"name": tile_type.name, "id": tile_type.id} for tile_type in model.TileTypeOption.query.order_by(model.TileTypeOption.name)
+        {"name": tile_type.name, "id": tile_type.id}
+        for tile_type in model.TileTypeOption.query.order_by(model.TileTypeOption.name)
     ]
 
     current_tile = model.Tile()
@@ -288,7 +292,7 @@ def generate_tile(player_id):
     tile_config = gameTile.pqGameTile()
     tile_type_obj = model.db.session.get(model.TileTypeOption, current_tile.type)
     tile_type_name = tile_type_obj.name if tile_type_obj else None
-    
+
     if tile_type_name == "sign":
         current_tile.content = tile_config.generate_signpost()
     elif tile_type_name == "monster":
@@ -309,7 +313,7 @@ def generate_tile(player_id):
     tile_details.tileid.data = str(current_tile.id)
     tile_details.type.data = tile_type_name
     tile_details.content.data = current_tile.content
-    
+
     # Filter available actions based on tile type (same as get_tile)
     all_actions = model.ActionOption.query.order_by(model.ActionOption.name).all()
     if tile_details.type.data == "sign":
@@ -321,14 +325,12 @@ def generate_tile(player_id):
     else:
         # Other tile types (monster, scene) allow all actions
         allowed_actions = all_actions
-    
+
     tile_details.action.choices = [
-        (tileaction.code or str(tileaction.id), tileaction.name)
-        for tileaction in allowed_actions
+        (tileaction.code or str(tileaction.id), tileaction.name) for tileaction in allowed_actions
     ]
 
     return render_template("gameTile.html", player_char=user_profile, form=tile_details)
-
 
 
 @main_bp.route("/player/<int:player_id>/start_journey", methods=["POST"])
@@ -350,17 +352,18 @@ def start_journey(player_id):
     # create first tile with content
     tile_config = gameTile.pqGameTile()
     tile_type_list = [
-        {"name": tile_type.name, "id": tile_type.id} for tile_type in model.TileTypeOption.query.order_by(model.TileTypeOption.name)
+        {"name": tile_type.name, "id": tile_type.id}
+        for tile_type in model.TileTypeOption.query.order_by(model.TileTypeOption.name)
     ]
     current_tile = model.Tile()
     current_tile.type = random.choice(tile_type_list)["id"]
     current_tile.user_id = player_id
     current_tile.playthrough_id = new_play.id
-    
+
     # Generate and save content to database based on tile type
     tile_type_obj = model.db.session.get(model.TileTypeOption, current_tile.type)
     tile_type_name = tile_type_obj.name if tile_type_obj else None
-    
+
     if tile_type_name == "sign":
         current_tile.content = tile_config.generate_signpost()
     elif tile_type_name == "monster":
@@ -370,7 +373,7 @@ def start_journey(player_id):
         current_tile.content = "This is a scene tile"
     elif tile_type_name == "treasure":
         current_tile.content = "This is a treasure tile"
-    
+
     model.db.session.add(current_tile)
     model.db.session.commit()
 
@@ -447,7 +450,7 @@ def execute_tile_action(playerid, tile_id):
         action_result = None
         tile_type = model.db.session.get(model.TileTypeOption, tile_record.type)
         tile_type_name = tile_type.name if tile_type else None
-        
+
         if action_name == "rest":
             # Check if resting on a monster tile
             if tile_type_name == "monster":
@@ -550,10 +553,14 @@ def execute_tile_action(playerid, tile_id):
 
     # If the client expects JSON (AJAX), return the action result and an HTML fragment for the updated tile
     if is_ajax:
-        tile_html = render_template("_tile_fragment.html", player_char=player_record, form=form, readonly=True, action_result=action_result)
+        tile_html = render_template(
+            "_tile_fragment.html", player_char=player_record, form=form, readonly=True, action_result=action_result
+        )
         return jsonify(ok=True, action_result=action_result, tile_html=tile_html)
 
-    return render_template("gameTile.html", player_char=player_record, form=form, readonly=True, action_result=action_result)
+    return render_template(
+        "gameTile.html", player_char=player_record, form=form, readonly=True, action_result=action_result
+    )
 
 
 @main_bp.route("/player/<int:player_id>/profile", methods=["GET"])
@@ -579,10 +586,10 @@ def get_history(player_id):
     user_profile = model.db.session.get(model.User, player_id)
     tile_history = model.Tile.query.filter_by(user_id=player_id).all()
     # Check if there's an active playthrough for button logic
-    active_playthrough = model.Playthrough.query.filter_by(
-        user_id=player_id, ended_at=None
-    ).first()
-    return render_template("gameHistory.html", player_char=user_profile, history=tile_history, active_playthrough=active_playthrough)
+    active_playthrough = model.Playthrough.query.filter_by(user_id=player_id, ended_at=None).first()
+    return render_template(
+        "gameHistory.html", player_char=user_profile, history=tile_history, active_playthrough=active_playthrough
+    )
 
 
 @main_bp.route("/player/<int:player_id>/gameover", methods=["GET"])

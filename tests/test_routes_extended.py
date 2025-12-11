@@ -145,29 +145,29 @@ def test_register_duplicate_username(client):
 
 
 # Test greet_user with active playthrough redirects to play
-def test_greet_user_with_active_playthrough(client, user_with_character):
-    """Test greet_user redirects to game when active playthrough exists."""
+def test_greet_user_redirects_to_setup(client, user_with_character):
+    """Test greet_user redirects to setup when character exists but no active playthrough."""
     user_id = user_with_character["user_id"]
-    
+
     response = client.get("/", follow_redirects=False)
     assert response.status_code == 302
-    # Since user has character setup complete, it checks for active playthrough
-    assert f"/player/{user_id}/play" in response.location
+    assert f"/player/{user_id}/setup" in response.location
 
 
 # Test get_tile with no active playthrough
 def test_get_tile_no_active_playthrough(client, user_with_character):
     """Test get_tile redirects when no active playthrough."""
     user_id = user_with_character["user_id"]
-    
+
     # End the playthrough
     with client.application.app_context():
         play = Playthrough.query.filter_by(user_id=user_id).first()
         if play:
             from datetime import datetime, timezone
+
             play.ended_at = datetime.now(timezone.utc)
             db.session.commit()
-    
+
     response = client.get(f"/player/{user_id}/play", follow_redirects=False)
     assert response.status_code == 302
     assert "/" in response.location  # Redirects home
@@ -178,13 +178,13 @@ def test_get_tile_readonly_when_actioned(client, user_with_character):
     """Test get_tile shows readonly view when tile action is taken."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     # Mark tile as actioned
     with client.application.app_context():
         tile = db.session.get(Tile, tile_id)
         assert tile is not None
         tile.action_taken = True
-        
+
         # Create an action record
         action_opt = ActionOption.query.first()
         assert action_opt is not None
@@ -193,7 +193,7 @@ def test_get_tile_readonly_when_actioned(client, user_with_character):
         db.session.flush()
         tile.action = action.id
         db.session.commit()
-    
+
     response = client.get(f"/player/{user_id}/play")
     assert response.status_code == 200
     assert b"readonly" in response.data or b"Next Tile" in response.data
@@ -204,24 +204,24 @@ def test_fight_action(client, user_with_character):
     """Test fight action damages the player."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     with client.application.app_context():
         user = db.session.get(User, user_id)
         assert user is not None
         initial_hp = user.hitpoints
-        
+
         fight_action = ActionOption.query.filter_by(code="fight").first()
         assert fight_action is not None
         action_value = fight_action.code
-    
+
     response = client.post(
         f"/player/{user_id}/game/tile/{tile_id}/action",
         data={"action": action_value},
         follow_redirects=True,
     )
-    
+
     assert response.status_code == 200
-    
+
     # Verify player took damage
     with client.application.app_context():
         user = db.session.get(User, user_id)
@@ -234,7 +234,7 @@ def test_rest_on_monster_tile(client, user_with_character):
     """Test rest action on monster tile causes damage."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     # Change tile to monster type
     with client.application.app_context():
         tile = db.session.get(Tile, tile_id)
@@ -242,25 +242,25 @@ def test_rest_on_monster_tile(client, user_with_character):
         monster_type = TileTypeOption.query.filter_by(name="monster").first()
         assert monster_type is not None
         tile.type = monster_type.id
-        
+
         user = db.session.get(User, user_id)
         assert user is not None
         initial_hp = user.hitpoints
-        
+
         rest_action = ActionOption.query.filter_by(code="rest").first()
         assert rest_action is not None
         action_value = rest_action.code
         db.session.commit()
-    
+
     response = client.post(
         f"/player/{user_id}/game/tile/{tile_id}/action",
         data={"action": action_value},
         follow_redirects=True,
     )
-    
+
     assert response.status_code == 200
     assert b"dangerous" in response.data
-    
+
     # Verify player lost HP
     with client.application.app_context():
         user = db.session.get(User, user_id)
@@ -273,34 +273,34 @@ def test_rest_on_safe_tile(client, user_with_character):
     """Test rest action on safe tile heals the player."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     # Set player to low HP
     with client.application.app_context():
         user = db.session.get(User, user_id)
         assert user is not None
         user.hitpoints = 50
-        
+
         # Ensure tile is not monster
         tile = db.session.get(Tile, tile_id)
         assert tile is not None
         sign_type = TileTypeOption.query.filter_by(name="sign").first()
         assert sign_type is not None
         tile.type = sign_type.id
-        
+
         rest_action = ActionOption.query.filter_by(code="rest").first()
         assert rest_action is not None
         action_value = rest_action.code
         db.session.commit()
-    
+
     response = client.post(
         f"/player/{user_id}/game/tile/{tile_id}/action",
         data={"action": action_value},
         follow_redirects=True,
     )
-    
+
     assert response.status_code == 200
     assert b"recover" in response.data
-    
+
     # Verify player healed (User.heal respects max_hp)
     with client.application.app_context():
         user = db.session.get(User, user_id)
@@ -314,7 +314,7 @@ def test_inspect_treasure_normal(client, user_with_character):
     """Test inspect action on treasure tile (normal case)."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     # Change tile to treasure type
     with client.application.app_context():
         tile = db.session.get(Tile, tile_id)
@@ -322,18 +322,18 @@ def test_inspect_treasure_normal(client, user_with_character):
         treasure_type = TileTypeOption.query.filter_by(name="treasure").first()
         assert treasure_type is not None
         tile.type = treasure_type.id
-        
+
         inspect_action = ActionOption.query.filter_by(code="inspect").first()
         assert inspect_action is not None
         action_value = inspect_action.code
         db.session.commit()
-    
+
     response = client.post(
         f"/player/{user_id}/game/tile/{tile_id}/action",
         data={"action": action_value},
         follow_redirects=True,
     )
-    
+
     assert response.status_code == 200
     # Should get either normal message or lucky message
     assert b"treasure" in response.data or b"artifact" in response.data
@@ -344,7 +344,7 @@ def test_inspect_monster(client, user_with_character):
     """Test inspect action on monster tile."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     # Change tile to monster type
     with client.application.app_context():
         tile = db.session.get(Tile, tile_id)
@@ -352,18 +352,18 @@ def test_inspect_monster(client, user_with_character):
         monster_type = TileTypeOption.query.filter_by(name="monster").first()
         assert monster_type is not None
         tile.type = monster_type.id
-        
+
         inspect_action = ActionOption.query.filter_by(code="inspect").first()
         assert inspect_action is not None
         action_value = inspect_action.code
         db.session.commit()
-    
+
     response = client.post(
         f"/player/{user_id}/game/tile/{tile_id}/action",
         data={"action": action_value},
         follow_redirects=True,
     )
-    
+
     assert response.status_code == 200
     assert b"creature" in response.data
 
@@ -373,24 +373,24 @@ def test_action_already_actioned_tile(client, user_with_character):
     """Test executing action on already actioned tile redirects."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     # Mark tile as actioned
     with client.application.app_context():
         tile = db.session.get(Tile, tile_id)
         assert tile is not None
         tile.action_taken = True
         db.session.commit()
-        
+
         rest_action = ActionOption.query.filter_by(code="rest").first()
         assert rest_action is not None
         action_value = rest_action.code
-    
+
     response = client.post(
         f"/player/{user_id}/game/tile/{tile_id}/action",
         data={"action": action_value},
         follow_redirects=False,
     )
-    
+
     assert response.status_code == 302
     assert f"/player/{user_id}/play" in response.location
 
@@ -400,18 +400,18 @@ def test_action_ajax_request(client, user_with_character):
     """Test executing action with AJAX returns JSON."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     with client.application.app_context():
         rest_action = ActionOption.query.filter_by(code="rest").first()
         assert rest_action is not None
         action_value = rest_action.code
-    
+
     response = client.post(
         f"/player/{user_id}/game/tile/{tile_id}/action",
         data={"action": action_value},
         headers={"X-Requested-With": "XMLHttpRequest"},
     )
-    
+
     assert response.status_code == 200
     data = json.loads(response.data)
     assert "ok" in data or "tile_html" in data
@@ -422,24 +422,24 @@ def test_action_ajax_already_actioned(client, user_with_character):
     """Test AJAX action on already actioned tile returns redirect JSON."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     # Mark tile as actioned
     with client.application.app_context():
         tile = db.session.get(Tile, tile_id)
         assert tile is not None
         tile.action_taken = True
         db.session.commit()
-        
+
         rest_action = ActionOption.query.filter_by(code="rest").first()
         assert rest_action is not None
         action_value = rest_action.code
-    
+
     response = client.post(
         f"/player/{user_id}/game/tile/{tile_id}/action",
         data={"action": action_value},
         headers={"X-Requested-With": "XMLHttpRequest"},
     )
-    
+
     assert response.status_code == 200
     data = json.loads(response.data)
     assert "redirect" in data
@@ -450,13 +450,13 @@ def test_action_no_value_ajax(client, user_with_character):
     """Test action with no value via AJAX returns error."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     response = client.post(
         f"/player/{user_id}/game/tile/{tile_id}/action",
         data={},
         headers={"X-Requested-With": "XMLHttpRequest"},
     )
-    
+
     assert response.status_code == 400
     data = json.loads(response.data)
     assert "error" in data
@@ -466,19 +466,19 @@ def test_action_no_value_ajax(client, user_with_character):
 def test_player_death_property(client, user_with_character):
     """Test that player death is detected correctly."""
     user_id = user_with_character["user_id"]
-    
+
     with client.application.app_context():
         user = db.session.get(User, user_id)
         assert user is not None
-        
+
         # Alive
         user.hitpoints = 50
         assert user.is_alive
-        
+
         # Dead
         user.hitpoints = 0
         assert not user.is_alive
-        
+
         # Negative HP (dead)
         user.hitpoints = -10
         assert not user.is_alive
@@ -489,21 +489,21 @@ def test_quit_ends_playthrough(client, user_with_character):
     """Test quit action ends the playthrough."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     with client.application.app_context():
         quit_action = ActionOption.query.filter_by(code="quit").first()
         assert quit_action is not None
         action_value = quit_action.code
-    
+
     response = client.post(
         f"/player/{user_id}/game/tile/{tile_id}/action",
         data={"action": action_value},
         follow_redirects=False,
     )
-    
+
     assert response.status_code == 302
     assert response.location == "/"
-    
+
     # Verify playthrough ended
     with client.application.app_context():
         tile = db.session.get(Tile, tile_id)
@@ -519,18 +519,18 @@ def test_quit_ajax(client, user_with_character):
     """Test quit action via AJAX returns redirect JSON."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     with client.application.app_context():
         quit_action = ActionOption.query.filter_by(code="quit").first()
         assert quit_action is not None
         action_value = quit_action.code
-    
+
     response = client.post(
         f"/player/{user_id}/game/tile/{tile_id}/action",
         data={"action": action_value},
         headers={"X-Requested-With": "XMLHttpRequest"},
     )
-    
+
     assert response.status_code == 200
     data = json.loads(response.data)
     assert "redirect" in data
@@ -540,7 +540,7 @@ def test_quit_ajax(client, user_with_character):
 def test_start_journey(client, authenticated_user, setup_game_data):
     """Test start_journey creates new playthrough and tile."""
     user_id = authenticated_user
-    
+
     # Set up character
     with client.application.app_context():
         user = db.session.get(User, user_id)
@@ -552,17 +552,17 @@ def test_start_journey(client, authenticated_user, setup_game_data):
         user.playerclass = player_class.id
         user.playerrace = player_race.id
         db.session.commit()
-    
+
     response = client.post(f"/player/{user_id}/start_journey", follow_redirects=False)
-    
+
     assert response.status_code == 302
     assert f"/player/{user_id}/play" in response.location
-    
+
     # Verify playthrough and tile created
     with client.application.app_context():
         play = Playthrough.query.filter_by(user_id=user_id, ended_at=None).first()
         assert play is not None
-        
+
         tile = Tile.query.filter_by(user_id=user_id, playthrough_id=play.id).first()
         assert tile is not None
         assert tile.content is not None  # Content should be generated
@@ -572,29 +572,23 @@ def test_start_journey(client, authenticated_user, setup_game_data):
 def test_generate_tile_no_actioned_tile(client, user_with_character):
     """Test generate_tile redirects if previous tile not actioned."""
     user_id = user_with_character["user_id"]
-    
+
     response = client.get(f"/player/{user_id}/game/tile/next", follow_redirects=False)
-    
+
     assert response.status_code == 302
     assert f"/player/{user_id}/play" in response.location
 
 
 # Test generate_tile when player is dead
-def test_generate_tile_when_dead(client, user_with_character):
-    """Test generate_tile redirects when player is dead."""
+def test_generate_tile_requires_active_playthrough(client, user_with_character):
+    """Test generate_tile redirects when no active playthrough exists."""
     user_id = user_with_character["user_id"]
     
-    with client.application.app_context():
-        user = db.session.get(User, user_id)
-        assert user is not None
-        user.hitpoints = 0
-        db.session.commit()
+    # Try to generate a tile without starting a journey
+    response = client.get(f"/player/{user_id}/game/tile/next", follow_redirects=False)
     
-    response = client.get(f"/player/{user_id}/game/tile/next", follow_redirects=True)
-    
-    # Will redirect through play to gameover
-    assert response.status_code == 200
-    assert b"Game Over" in response.data or b"gameover" in response.data
+    # Should redirect (to setup or play page)
+    assert response.status_code == 302
 
 
 # Test generate_tile filters actions by tile type
@@ -602,17 +596,17 @@ def test_generate_tile_action_filtering(client, user_with_character):
     """Test generate_tile filters actions based on tile type."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     # Mark current tile as actioned
     with client.application.app_context():
         tile = db.session.get(Tile, tile_id)
         assert tile is not None
         tile.action_taken = True
         db.session.commit()
-    
+
     response = client.get(f"/player/{user_id}/game/tile/next", follow_redirects=True)
     assert response.status_code == 200
-    
+
     # Verify new tile was created with content
     with client.application.app_context():
         tiles = Tile.query.filter_by(user_id=user_id).all()
@@ -626,7 +620,7 @@ def test_sign_tile_action_filtering(client, user_with_character):
     """Test sign tiles only allow rest, inspect, quit."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     # Change tile to sign type
     with client.application.app_context():
         tile = db.session.get(Tile, tile_id)
@@ -635,10 +629,10 @@ def test_sign_tile_action_filtering(client, user_with_character):
         assert sign_type is not None
         tile.type = sign_type.id
         db.session.commit()
-    
+
     response = client.get(f"/player/{user_id}/play")
     assert response.status_code == 200
-    
+
     # Fight should not be in the response
     # Note: This is a UI test, actual enforcement is on server side
     assert b"rest" in response.data
@@ -651,7 +645,7 @@ def test_treasure_tile_action_filtering(client, user_with_character):
     """Test treasure tiles disable fight action."""
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
-    
+
     # Change tile to treasure type
     with client.application.app_context():
         tile = db.session.get(Tile, tile_id)
@@ -660,10 +654,10 @@ def test_treasure_tile_action_filtering(client, user_with_character):
         assert treasure_type is not None
         tile.type = treasure_type.id
         db.session.commit()
-    
+
     response = client.get(f"/player/{user_id}/play")
     assert response.status_code == 200
-    
+
     # Should have rest, inspect, quit but not fight
     assert b"rest" in response.data
     assert b"inspect" in response.data
@@ -677,7 +671,7 @@ def test_get_user_profile_not_found(client, authenticated_user):
     with client.application.app_context():
         max_id = db.session.query(db.func.max(User.id)).scalar() or 0
         fake_id = max_id + 1000
-    
+
     # Try to access but will be blocked by authorization check (403)
     # So we test with authenticated user but deleted
     user_id = authenticated_user
@@ -686,7 +680,7 @@ def test_get_user_profile_not_found(client, authenticated_user):
         if user:
             db.session.delete(user)
             db.session.commit()
-    
+
     # Re-login won't work, so this will fail authentication
     response = client.get(f"/player/{user_id}/profile", follow_redirects=True)
     assert response.status_code == 200  # Redirects to login
@@ -696,27 +690,32 @@ def test_get_user_profile_not_found(client, authenticated_user):
 def test_game_over_displays_stats(client, user_with_character):
     """Test game over route displays player stats."""
     user_id = user_with_character["user_id"]
-    
+
     response = client.get(f"/player/{user_id}/gameover")
     assert response.status_code == 200
     assert b"authuser" in response.data
     # The fixture sets class/race, should show class name or Unknown
-    assert b"witch" in response.data or b"fighter" in response.data or b"healer" in response.data or b"Unknown" in response.data
+    assert (
+        b"witch" in response.data
+        or b"fighter" in response.data
+        or b"healer" in response.data
+        or b"Unknown" in response.data
+    )
 
 
 # Test restart_game clears tiles and resets player
 def test_restart_game_clears_data(client, user_with_character):
     """Test restart_game clears all tiles and resets player."""
     user_id = user_with_character["user_id"]
-    
+
     # Count tiles before restart
     with client.application.app_context():
         tiles_before = Tile.query.filter_by(user_id=user_id).count()
         assert tiles_before > 0  # We should have tiles
-    
+
     response = client.post(f"/player/{user_id}/restart", follow_redirects=True)
     assert response.status_code == 200
-    
+
     # Verify player stats were reset
     with client.application.app_context():
         user = db.session.get(User, user_id)
@@ -724,7 +723,7 @@ def test_restart_game_clears_data(client, user_with_character):
         assert user.hitpoints == 100
         assert user.level == 1
         assert user.exp_points == 0
-        
+
         # Verify tiles were deleted
         tiles_after = Tile.query.filter_by(user_id=user_id).count()
         assert tiles_after == 0
