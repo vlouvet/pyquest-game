@@ -410,7 +410,6 @@ def test_game_over_when_hp_zero(client, user_with_character):
         user.take_damage(10)
         assert user.hitpoints == initial_hp - 10
         assert user.is_alive
-
         # Take fatal damage
         user.take_damage(user.hitpoints + 10)
         assert user.hitpoints == 0
@@ -437,13 +436,11 @@ def test_game_over_route(client, user_with_character):
 def test_restart_game(client, user_with_character):
     """Test restarting the game redirects to setup."""
     user_id = user_with_character["user_id"]
-
     # Restart the game
     response = client.post(
         f"/player/{user_id}/restart",
         follow_redirects=True,
     )
-
     assert response.status_code == 200
     # Should redirect to character setup
     assert b"setup" in response.data or b"charsetup" in response.data.lower()
