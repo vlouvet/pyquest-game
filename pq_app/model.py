@@ -136,9 +136,11 @@ class TileTypeOption(Model):
     __tablename__ = "tiletypeoption"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
+    ascii_art = db.Column(db.Text, nullable=True)
 
-    def __init__(self, name=None):
+    def __init__(self, name=None, ascii_art=None):
         self.name = name
+        self.ascii_art = ascii_art
 
 
 class PlayerClass(Model):

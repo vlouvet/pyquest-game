@@ -247,7 +247,7 @@ def get_tile(player_id):
         allowed_actions = all_actions
 
     form.action.choices = [(tileaction.code or str(tileaction.id), tileaction.name) for tileaction in allowed_actions]
-    return render_template("gameTile.html", player_char=user_profile, form=form)
+    return render_template("gameTile.html", player_char=user_profile, form=form, tile_type_obj=tile_type_obj)
 
 
 @main_bp.route("/player/<int:player_id>/game/tile/next", methods=["POST", "GET"])
@@ -491,6 +491,7 @@ def execute_tile_action(playerid, tile_id):
             "_tile_fragment.html", 
             player_char=player_record, 
             form=form, 
+            tile_type_obj=tile_type_obj, 
             readonly=True, 
             action_result=combat_result.message
         )
@@ -500,6 +501,7 @@ def execute_tile_action(playerid, tile_id):
         "gameTile.html", 
         player_char=player_record, 
         form=form, 
+        tile_type_obj=tile_type_obj, 
         readonly=True, 
         action_result=combat_result.message
     )
