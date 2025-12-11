@@ -37,6 +37,9 @@ class User(Model, UserMixin):
     level = db.Column(db.Integer, default=1)
     playerclass = db.Column(db.Integer, db.ForeignKey("playerclass.id"))
     playerrace = db.Column(db.Integer, db.ForeignKey("playerrace.id"))
+    # Points system: balance and last accrual timestamp
+    points = db.Column(db.Integer, default=0)
+    last_points_accrual_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
@@ -164,7 +167,6 @@ class TileTypeOption(Model):
     ascii_art = db.Column(db.Text, nullable=True)
     ascii_art = db.Column(db.Text, nullable=True)
 
-    def __init__(self, name=None, ascii_art=None):
     def __init__(self, name=None, ascii_art=None):
         self.name = name
         self.ascii_art = ascii_art

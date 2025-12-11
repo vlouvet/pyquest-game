@@ -12,6 +12,7 @@ import random
 from typing import Optional, List, Tuple, Dict
 from flask import flash
 from .. import model, gameTile, pqMonsters
+from flask import current_app
 
 
 class TileData:
@@ -91,8 +92,13 @@ class TileService:
 
         # Initialize monster HP for monster tiles
         if tile_type_name == "monster":
-            # Random HP between 30-70
-            monster_hp = random.randint(30, 70)
+            # Tougher monsters: configurable HP range
+            cfg = current_app.config if current_app else {}
+            hp_min = cfg.get("MONSTER_HP_MIN", 60)
+            hp_max = cfg.get("MONSTER_HP_MAX", 120)
+            multiplier = cfg.get("DIFFICULTY_MULTIPLIER", 1.0)
+            base_hp = random.randint(hp_min, hp_max)
+            monster_hp = int(base_hp * float(multiplier))
             new_tile.monster_max_hp = monster_hp
             new_tile.monster_current_hp = monster_hp
 

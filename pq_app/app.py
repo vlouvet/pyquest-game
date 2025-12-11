@@ -10,6 +10,7 @@ from flask_login import (
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import model, gameforms, pqMonsters, gameTile
 from .services import CombatService, TileService, MediaService
+from .services.player_service import PlayerService
 from .services import CombatService, TileService, MediaService
 
 # Create Blueprint
@@ -232,6 +233,9 @@ def get_tile(player_id):
             readonly=True,
         )
 
+    # Accrue points lazily on tile view
+    PlayerService().accrue_points(user_profile)
+
     # Active tile - show available actions
     form.action.choices = [(action.code or str(action.id), action.name) for action in tile_data.allowed_actions]
     return render_template(
@@ -399,8 +403,9 @@ def execute_tile_action(playerid, tile_id):
             return jsonify(error="No action selected"), 400
         abort(400, description="No action selected")
 
-    # Initialize combat service
+    # Initialize services
     combat_service = CombatService()
+    player_service = PlayerService()
 
     # Resolve ActionOption
     action_option = combat_service.get_action_by_value(action_post_value)
@@ -455,6 +460,11 @@ def execute_tile_action(playerid, tile_id):
         # Check for combat_action_code parameter (for enhanced combat)
         combat_action_code = request.form.get("combat_action_code")
 
+        # Accrue points lazily and spend one point before executing action
+        player_service.accrue_points(player_record)
+        # Spend a point, but do not block actions if balance is 0
+        player_service.spend_point(player_record)
+
         # Execute action using combat service
         combat_result = combat_service.execute_action(
             player=player_record,
@@ -480,14 +490,12 @@ def execute_tile_action(playerid, tile_id):
 
     # Check if player is still alive after action
     if not combat_result.player_alive:
-    if not combat_result.player_alive:
         if is_ajax:
             return jsonify(error="You have fallen in battle..."), 200
         flash("You have fallen in battle...")
         return redirect(url_for("main.game_over", player_id=playerid))
 
     # If the player chose to quit, end the journey and return to the main/dashboard
-    if combat_result.should_end_playthrough:
     if combat_result.should_end_playthrough:
         if is_ajax:
             return jsonify(ok=True, redirect=url_for("main.greet_user"))
@@ -546,6 +554,7 @@ def execute_tile_action(playerid, tile_id):
         readonly=is_readonly,
         action_result=combat_result.message,
         monster_status=monster_status,
+        points_balance=player_record.points,
     )
 
 
@@ -608,6 +617,8 @@ def get_user_profile(player_id):
     user_profile = model.db.session.get(model.User, player_id)
     if not user_profile:
         return redirect(url_for("main.greet_user"))
+    # Accrue points lazily on profile view
+    PlayerService().accrue_points(user_profile)
     return render_template("profile.html", player_char=user_profile)
 
 
@@ -621,10 +632,16 @@ def get_history(player_id):
     # get current logged in user profile
     user_profile = model.db.session.get(model.User, player_id)
     tile_history = model.Tile.query.filter_by(user_id=player_id).all()
+    # Preload encounters for each tile
+    tile_encounters = {t.id: t.encounters for t in tile_history}
     # Check if there's an active playthrough for button logic
     active_playthrough = model.Playthrough.query.filter_by(user_id=player_id, ended_at=None).first()
     return render_template(
-        "gameHistory.html", player_char=user_profile, history=tile_history, active_playthrough=active_playthrough
+        "gameHistory.html",
+        player_char=user_profile,
+        history=tile_history,
+        tile_encounters=tile_encounters,
+        active_playthrough=active_playthrough,
     )
 
 

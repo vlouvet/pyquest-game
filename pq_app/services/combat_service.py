@@ -12,6 +12,7 @@ from flask import flash
 from sqlalchemy import select, or_
 
 from .. import model
+from flask import current_app
 
 
 class CombatResult:
@@ -217,8 +218,12 @@ class CombatService:
                         parts.append(f"Monster HP: {new_monster_hp}/{tile.monster_max_hp}")
 
                 # Monster counter-attack (only if monster is alive)
-                if new_monster_hp > 0 and random.randint(1, 100) <= 50:
-                    damage_received = random.randint(3, 10)
+                cfg = current_app.config if current_app else {}
+                chance = int(cfg.get("COUNTER_ATTACK_CHANCE", 70))
+                dmg_min = int(cfg.get("COUNTER_DAMAGE_MIN", 5))
+                dmg_max = int(cfg.get("COUNTER_DAMAGE_MAX", 15))
+                if new_monster_hp > 0 and random.randint(1, 100) <= chance:
+                    damage_received = random.randint(dmg_min, dmg_max)
                     player.take_damage(damage_received)
                     hp_change -= damage_received
                     parts.append(f"received {damage_received} damage")
@@ -226,9 +231,11 @@ class CombatService:
             # Apply healing
             if combat_action.heal_amount > 0:
                 healed = min(combat_action.heal_amount, player.max_hp - player.hitpoints)
-                player.heal(combat_action.heal_amount)
-                hp_change += healed
-                parts.append(f"healed {healed} HP")
+                nerf = int(cfg.get("HEALING_NERF_PERCENT", 20))
+                heal_applied = max(0, int(healed * (100 - nerf) / 100))
+                player.heal(heal_applied)
+                hp_change += heal_applied
+                parts.append(f"healed {heal_applied} HP")
 
             # Note defense boost (not yet implemented in player state)
             if combat_action.defense_boost > 0:
@@ -332,11 +339,11 @@ class CombatService:
 
         # Execute legacy action based on type
         if action_name == "rest":
-            return self._execute_rest(player, tile_type_name)
+            return self._execute_rest(player, tile_type_name, tile)
         elif action_name == "fight":
-            return self._execute_fight(player, tile_type_name)
+            return self._execute_fight(player, tile_type_name, tile)
         elif action_name == "inspect":
-            return self._execute_inspect(player, tile_type_name)
+            return self._execute_inspect(player, tile_type_name, tile)
         elif action_name == "quit":
             return self._execute_quit(player, tile)
         else:
@@ -348,7 +355,7 @@ class CombatService:
             # Unknown action - default behavior
             return CombatResult(success=True, message=f"Performed action: {action_name}", tile_completed=True)
 
-    def _execute_rest(self, player: model.User, tile_type_name: str) -> CombatResult:
+    def _execute_rest(self, player: model.User, tile_type_name: str, tile: model.Tile) -> CombatResult:
         """Execute rest action"""
         # Check if resting on a monster tile
         if tile_type_name == "monster":
@@ -358,6 +365,20 @@ class CombatService:
             message = f"Resting near a monster is dangerous! You lost {damage} HP."
             flash(message)
 
+            encounter = model.Encounter(
+                tile_id=tile.id,
+                user_id=player.id,
+                combat_action_id=None,
+                player_hp_before=player.hitpoints + damage,
+                player_hp_after=player.hitpoints,
+                monster_hp_before=tile.monster_current_hp,
+                monster_hp_after=tile.monster_current_hp,
+                damage_dealt=0,
+                damage_received=damage,
+                was_successful=True,
+                result_message=message,
+            )
+            self.db.add(encounter)
             return CombatResult(
                 success=True,
                 message=message,
@@ -372,27 +393,69 @@ class CombatService:
             message = f"You rest and recover {heal_amount} HP."
             flash(message)
 
+            encounter = model.Encounter(
+                tile_id=tile.id,
+                user_id=player.id,
+                combat_action_id=None,
+                player_hp_before=player.hitpoints - heal_amount,
+                player_hp_after=player.hitpoints,
+                monster_hp_before=None,
+                monster_hp_after=None,
+                damage_dealt=0,
+                damage_received=0,
+                was_successful=True,
+                result_message=message,
+            )
+            self.db.add(encounter)
             return CombatResult(
                 success=True, message=message, player_hp_change=heal_amount, player_alive=True, tile_completed=True
             )
 
-    def _execute_fight(self, player: model.User, tile_type_name: str) -> CombatResult:
+    def _execute_fight(self, player: model.User, tile_type_name: str, tile: model.Tile) -> CombatResult:
         """Execute fight action"""
         damage = random.randint(5, 20)
         player.take_damage(damage)
         message = f"You fought bravely and took {damage} damage!"
         flash(message)
 
+        encounter = model.Encounter(
+            tile_id=tile.id,
+            user_id=player.id,
+            combat_action_id=None,
+            player_hp_before=player.hitpoints + damage,
+            player_hp_after=player.hitpoints,
+            monster_hp_before=tile.monster_current_hp,
+            monster_hp_after=tile.monster_current_hp,
+            damage_dealt=0,
+            damage_received=damage,
+            was_successful=True,
+            result_message=message,
+        )
+        self.db.add(encounter)
         return CombatResult(
             success=True, message=message, player_hp_change=-damage, player_alive=player.is_alive, tile_completed=True
         )
 
-    def _execute_inspect(self, player: model.User, tile_type_name: str) -> CombatResult:
+    def _execute_inspect(self, player: model.User, tile_type_name: str, tile: model.Tile) -> CombatResult:
         """Execute inspect action"""
         if tile_type_name == "monster":
             message = "You carefully observe the creature, learning its patterns."
             flash(message)
 
+            encounter = model.Encounter(
+                tile_id=tile.id,
+                user_id=player.id,
+                combat_action_id=None,
+                player_hp_before=player.hitpoints,
+                player_hp_after=player.hitpoints,
+                monster_hp_before=tile.monster_current_hp,
+                monster_hp_after=tile.monster_current_hp,
+                damage_dealt=0,
+                damage_received=0,
+                was_successful=True,
+                result_message=message,
+            )
+            self.db.add(encounter)
             return CombatResult(
                 success=True, message=message, player_hp_change=0, player_alive=True, tile_completed=True
             )
@@ -406,6 +469,20 @@ class CombatService:
                 message = f"You found a magical healing artifact! Restored {healed} HP to full health!"
                 flash(message)
 
+                encounter = model.Encounter(
+                    tile_id=tile.id,
+                    user_id=player.id,
+                    combat_action_id=None,
+                    player_hp_before=player.hitpoints - healed,
+                    player_hp_after=player.hitpoints,
+                    monster_hp_before=None,
+                    monster_hp_after=None,
+                    damage_dealt=0,
+                    damage_received=0,
+                    was_successful=True,
+                    result_message=message,
+                )
+                self.db.add(encounter)
                 return CombatResult(
                     success=True, message=message, player_hp_change=healed, player_alive=True, tile_completed=True
                 )
@@ -413,6 +490,20 @@ class CombatService:
                 message = "You inspect the area and find hints of treasure nearby."
                 flash(message)
 
+                encounter = model.Encounter(
+                    tile_id=tile.id,
+                    user_id=player.id,
+                    combat_action_id=None,
+                    player_hp_before=player.hitpoints,
+                    player_hp_after=player.hitpoints,
+                    monster_hp_before=None,
+                    monster_hp_after=None,
+                    damage_dealt=0,
+                    damage_received=0,
+                    was_successful=True,
+                    result_message=message,
+                )
+                self.db.add(encounter)
                 return CombatResult(
                     success=True, message=message, player_hp_change=0, player_alive=True, tile_completed=True
                 )
@@ -420,6 +511,20 @@ class CombatService:
             message = "You take a moment to examine your surroundings carefully."
             flash(message)
 
+            encounter = model.Encounter(
+                tile_id=tile.id,
+                user_id=player.id,
+                combat_action_id=None,
+                player_hp_before=player.hitpoints,
+                player_hp_after=player.hitpoints,
+                monster_hp_before=None,
+                monster_hp_after=None,
+                damage_dealt=0,
+                damage_received=0,
+                was_successful=True,
+                result_message=message,
+            )
+            self.db.add(encounter)
             return CombatResult(
                 success=True, message=message, player_hp_change=0, player_alive=True, tile_completed=True
             )
