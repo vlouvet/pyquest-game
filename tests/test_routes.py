@@ -29,7 +29,8 @@ def test_home_redirect(client):
 def setup_test_user(client):
     """Fixture to add a test user to the database."""
     with client.application.app_context():
-        user = User(username="testuser", password_hash=generate_password_hash("testpassword"))
+        user = User(username="testuser")
+        user.set_password("testpassword")  # Use the set_password method
         db.session.add(user)
         db.session.commit()
 
