@@ -151,14 +151,16 @@ def setup_game_data(client):
             db.session.add(scene)
             db.session.add(treasure)
 
-        # Add ActionOption
+        # Add ActionOption (create codes for UI to post)
         if not ActionOption.query.first():
-            rest = ActionOption(name="Rest")
-            explore = ActionOption(name="Explore")
-            fight = ActionOption(name="Fight")
+            rest = ActionOption(name="rest", code="rest")
+            inspect = ActionOption(name="inspect", code="inspect")
+            fight = ActionOption(name="fight", code="fight")
+            quit_opt = ActionOption(name="quit", code="quit")
             db.session.add(rest)
-            db.session.add(explore)
+            db.session.add(inspect)
             db.session.add(fight)
+            db.session.add(quit_opt)
 
         db.session.commit()
 
@@ -309,11 +311,11 @@ def test_execute_tile_action(client, user_with_character):
     with client.application.app_context():
         action = ActionOption.query.first()
         assert action is not None
-        action_id = action.id
+        action_value = action.code or str(action.id)
 
     response = client.post(
         f"/player/{user_id}/game/tile/{tile_id}/action",
-        data={"action": action_id},
+        data={"action": action_value},
         follow_redirects=True,
     )
     assert response.status_code == 200
@@ -457,12 +459,15 @@ def test_heal_respects_max_hp(client, user_with_character):
         user.hitpoints = user.max_hp
         db.session.commit()
 
-    # Execute rest action (ID 1 based on init_defaults)
-    action_id = 1
+    # Execute rest action by code
+    with client.application.app_context():
+        rest_action = ActionOption.query.filter_by(code="rest").first()
+        assert rest_action is not None
+        action_value = rest_action.code or str(rest_action.id)
 
     client.post(
         f"/player/{user_id}/game/tile/{tile_id}/action",
-        data={"action": action_id},
+        data={"action": action_value},
         follow_redirects=True,
     )
 
@@ -479,15 +484,15 @@ def test_inspect_action(client, user_with_character):
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
 
-    # Get inspect action ID
+    # Get inspect action code
     with client.application.app_context():
-        inspect_action = ActionOption.query.filter_by(name="inspect").first()
+        inspect_action = ActionOption.query.filter_by(code="inspect").first()
         assert inspect_action is not None
-        action_id = inspect_action.id
+        action_value = inspect_action.code or str(inspect_action.id)
 
     response = client.post(
         f"/player/{user_id}/game/tile/{tile_id}/action",
-        data={"action": action_id},
+        data={"action": action_value},
         follow_redirects=True,
     )
 
@@ -501,7 +506,10 @@ def test_inspect_action(client, user_with_character):
         # tile.action stores the Action history id; verify the history references the ActionOption
         action_history = db.session.get(Action, tile.action)
         assert action_history is not None
-        assert action_history.actionverb == action_id
+        # Resolve the ActionOption id and compare
+        inspect_action_db = ActionOption.query.filter_by(code="inspect").first()
+        assert inspect_action_db is not None
+        assert action_history.actionverb == inspect_action_db.id
 
 
 def test_quit_action(client, user_with_character):
@@ -509,15 +517,15 @@ def test_quit_action(client, user_with_character):
     user_id = user_with_character["user_id"]
     tile_id = user_with_character["tile_id"]
 
-    # Get quit action ID
+    # Get quit action code
     with client.application.app_context():
-        quit_action = ActionOption.query.filter_by(name="quit").first()
+        quit_action = ActionOption.query.filter_by(code="quit").first()
         assert quit_action is not None
-        action_id = quit_action.id
+        action_value = quit_action.code or str(quit_action.id)
 
     response = client.post(
         f"/player/{user_id}/game/tile/{tile_id}/action",
-        data={"action": action_id},
+        data={"action": action_value},
         follow_redirects=True,
     )
 
@@ -531,4 +539,6 @@ def test_quit_action(client, user_with_character):
         # tile.action stores the Action history id; verify the history references the ActionOption
         action_history = db.session.get(Action, tile.action)
         assert action_history is not None
-        assert action_history.actionverb == action_id
+        quit_action_db = ActionOption.query.filter_by(code="quit").first()
+        assert quit_action_db is not None
+        assert action_history.actionverb == quit_action_db.id

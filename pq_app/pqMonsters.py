@@ -1,5 +1,6 @@
 import random
 
+
 class NPCMonster:
     def __init__(self):
         self.name = self.choose_type()
@@ -38,12 +39,12 @@ class NPCMonster:
 
     def choose_type(self):
         animal_ascii = {}
-        animal_ascii['elephant'] = "elephant"
+        animal_ascii["elephant"] = "elephant"
 
-        animal_ascii['giraffe'] = "giraffe"
+        animal_ascii["giraffe"] = "giraffe"
 
-        animal_ascii['Gryffon'] = "gryffon"
+        animal_ascii["Gryffon"] = "gryffon"
 
-        animal_ascii['Dragon'] = "dragon"
+        animal_ascii["Dragon"] = "dragon"
 
         return random.choice(list(animal_ascii.values()))

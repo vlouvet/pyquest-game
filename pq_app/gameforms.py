@@ -25,7 +25,8 @@ class TileForm(FlaskForm):
     tileid = StringField("Tile ID", render_kw={"readonly": True})
     type = StringField("Tile Type", render_kw={"readonly": True})
     content = TextAreaField("content", render_kw={"readonly": True})
-    action = SelectField("Tile Action", coerce=int, validators=[DataRequired()])
+    # ActionOption.code values are strings; accept string coercion so codes can be posted.
+    action = SelectField("Tile Action", coerce=str, validators=[DataRequired()])
 
 
 class RegisterForm(FlaskForm):
@@ -53,3 +54,8 @@ class LoginForm(FlaskForm):
     password = PasswordField("Password", validators=[DataRequired()])
     remember = BooleanField("Remember Me")
     submit = SubmitField("Login")
+
+
+class RestartForm(FlaskForm):
+    """Simple form to confirm restarting the game (provides CSRF token)."""
+    submit = SubmitField("Start New Adventure")

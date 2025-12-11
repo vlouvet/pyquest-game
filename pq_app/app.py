@@ -186,7 +186,7 @@ def get_tile(player_id):
     if tile_details and tile_details.action_taken:
         # set the form action choices to the action option selected for this tile record
         form.action.choices = [
-            (action_option.id, action_option.name)
+            (action_option.code or str(action_option.id), action_option.name)
             for action_option in model.ActionOption.query.join(
                 model.Action, model.Action.actionverb == model.ActionOption.id
             )
@@ -194,7 +194,10 @@ def get_tile(player_id):
             .order_by(model.ActionOption.name)
         ]
         return render_template("gameTile.html", player_char=user_profile, form=form, readonly=True)
-    form.action.choices = [(tileaction.id, tileaction.name) for tileaction in model.ActionOption.query.order_by("name")]
+    form.action.choices = [
+        (tileaction.code or str(tileaction.id), tileaction.name)
+        for tileaction in model.ActionOption.query.order_by(model.ActionOption.name)
+    ]
     return render_template("gameTile.html", player_char=user_profile, form=form)
 
 
@@ -238,7 +241,10 @@ def generate_tile(player_id):
     tile_details.tileid = current_tile.id
     tile_type_obj = model.db.session.get(model.TileTypeOption, current_tile.type)
     tile_details.type.data = tile_type_obj.name if tile_type_obj else None
-    tile_details.action.choices = [(tileaction.id, tileaction.name) for tileaction in model.ActionOption.query.order_by(model.ActionOption.name)]
+    tile_details.action.choices = [
+        (tileaction.code or str(tileaction.id), tileaction.name)
+        for tileaction in model.ActionOption.query.order_by(model.ActionOption.name)
+    ]
 
     return render_template("gameTile.html", player_char=user_profile, form=tile_details)
 
@@ -249,14 +255,31 @@ def execute_tile_action(playerid, tile_id):
     # Authorization check
     if current_user.id != playerid:
         abort(403)
-
-    # Get action from request form data
-    action_type_ID = request.form.get("action", type=int)
+    # Accept either ActionOption.code (string) or numeric id in the posted `action` field.
     if request.method != "POST":
         return {"status_code": 402}
 
-    if not action_type_ID:
+    action_post_value = request.form.get("action")
+    if not action_post_value:
         abort(400, description="No action selected")
+
+    # Resolve ActionOption: prefer lookup by code; if not found and value is numeric, lookup by id.
+    action_option = None
+    action_name = None
+    # Try lookup by code first
+    if action_post_value:
+        action_option = model.ActionOption.query.filter_by(code=action_post_value).one_or_none()
+    # Fallback to numeric id
+    if not action_option and action_post_value and action_post_value.isdigit():
+        action_option = model.db.session.get(model.ActionOption, int(action_post_value))
+    # Last resort: lookup by name
+    if not action_option:
+        action_option = model.ActionOption.query.filter_by(name=action_post_value).one_or_none()
+
+    if action_option:
+        action_name = action_option.name
+    else:
+        action_name = "unknown"
 
     # Use a transactional nested block and acquire a row-level lock on the tile to prevent races
     with model.db.session.begin_nested():
@@ -269,55 +292,54 @@ def execute_tile_action(playerid, tile_id):
         if tile_record.action_taken:
             abort(400, description="tile has already been actioned")
 
-        # validate whether an action record for this tile & verb already exists
-        action_record = model.Action.query.filter_by(tile=tile_id, actionverb=action_type_ID).first()
+        # Resolve action history existence
+        actionverb_id = action_option.id if action_option else None
+        action_record = None
+        if actionverb_id is not None:
+            action_record = model.Action.query.filter_by(tile=tile_id, actionverb=actionverb_id).first()
 
         # handle player and apply action semantics
         player_record = model.db.session.get(model.User, playerid)
         if not player_record:
             abort(400, description="Player not found")
 
-        # Prefer lookup by ActionOption.code if provided, otherwise fall back to id/name
-        action_option = model.db.session.get(model.ActionOption, action_type_ID)
-        action_name = None
-        if action_option:
-            action_name = action_option.name
-        else:
-            # fallback: try lookup by code string if form provided a code
-            action_code = request.form.get("action_code")
-            if action_code:
-                action_option = model.ActionOption.query.filter_by(code=action_code).one_or_none()
-                if action_option:
-                    action_name = action_option.name
-        action_name = action_name or "unknown"
-
+        # Apply action semantics and capture a short result message
+        action_result = None
         if action_name == "rest":
             player_record.heal(10)
-            flash("You rest and recover 10 HP.")
+            action_result = "You rest and recover 10 HP."
+            flash(action_result)
 
         elif action_name == "fight":
             damage = random.randint(5, 20)
             player_record.take_damage(damage)
-            flash(f"You fought bravely and took {damage} damage!")
+            action_result = f"You fought bravely and took {damage} damage!"
+            flash(action_result)
 
         elif action_name == "inspect":
             tile_type = model.db.session.get(model.TileTypeOption, tile_record.type)
             if tile_type and tile_type.name == "monster":
-                flash("You carefully observe the creature, learning its patterns.")
+                action_result = "You carefully observe the creature, learning its patterns."
             elif tile_type and tile_type.name == "treasure":
-                flash("You inspect the area and find hints of treasure nearby.")
+                action_result = "You inspect the area and find hints of treasure nearby."
             else:
-                flash("You take a moment to examine your surroundings carefully.")
+                action_result = "You take a moment to examine your surroundings carefully."
+            flash(action_result)
 
         elif action_name == "quit":
-            flash("You decide to retreat from this challenge.")
+            action_result = "You decide to retreat from this challenge."
+            flash(action_result)
+
+        else:
+            action_result = f"Performed action: {action_name}"
+            flash(action_result)
 
         # Create Action record for history tracking (or reuse existing)
         if not action_record:
             new_action = model.Action()
             new_action.name = action_name
             new_action.tile = tile_id
-            new_action.actionverb = action_type_ID
+            new_action.actionverb = actionverb_id
             model.db.session.add(new_action)
             model.db.session.flush()
             action_history_id = new_action.id
@@ -338,7 +360,20 @@ def execute_tile_action(playerid, tile_id):
         flash("You have fallen in battle...")
         return redirect(url_for("main.game_over", player_id=playerid))
 
-    return redirect(url_for("main.generate_tile", player_id=playerid))
+    # Render readonly tile view including the action result so the user sees the outcome
+    tile_details = model.db.session.get(model.Tile, tile_id)
+    form = gameforms.TileForm(obj=tile_details)
+    form.tileid = tile_details.id
+    tile_type_obj = model.db.session.get(model.TileTypeOption, tile_details.type)
+    form.type.data = tile_type_obj.name if tile_type_obj else None
+    form.action.choices = [
+        (opt.code or str(opt.id), opt.name)
+        for opt in model.ActionOption.query.join(model.Action, model.Action.actionverb == model.ActionOption.id)
+        .filter(model.Action.tile == tile_details.id)
+        .order_by(model.ActionOption.name)
+    ]
+
+    return render_template("gameTile.html", player_char=player_record, form=form, readonly=True, action_result=action_result)
 
 
 @main_bp.route("/player/<int:player_id>/profile", methods=["GET"])
@@ -390,6 +425,8 @@ def game_over(player_id):
 
     # Count tiles explored
     tiles_explored = model.Tile.query.filter_by(user_id=player_id).count()
+    # Provide a RestartForm so template can render a POST form with CSRF token
+    restart_form = gameforms.RestartForm()
 
     return render_template(
         "gameover.html",
@@ -397,6 +434,7 @@ def game_over(player_id):
         player_class_name=player_class_name,
         player_race_name=player_race_name,
         tiles_explored=tiles_explored,
+        form=restart_form,
     )
 
 

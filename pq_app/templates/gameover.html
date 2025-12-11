@@ -24,7 +24,10 @@
     </div>
     
     <div class="game-over-actions">
-        <a href="{{ url_for('main.restart_game', player_id=player_char.id) }}" class="btn btn-primary">Start New Adventure</a>
+        <form method="post" action="{{ url_for('main.restart_game', player_id=player_char.id) }}" onsubmit="return confirm('Start a new adventure? This will reset your current run.');" style="display:inline">
+            {{ form.csrf_token }}
+            <button type="submit" class="btn btn-primary">Start New Adventure</button>
+        </form>
         <a href="{{ url_for('main.get_history', player_id=player_char.id) }}" class="btn btn-secondary">View History</a>
         <a href="{{ url_for('main.greet_user') }}" class="btn btn-secondary">Home</a>
     </div>
