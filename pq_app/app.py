@@ -272,8 +272,7 @@ def generate_tile(player_id):
     if not tile_record:
         return redirect(url_for("main.get_tile", player_id=player_id))
     # if the tile has not been actioned redirect to that tile page
-    # use getattr to safely handle cases where action_taken might not exist or tile_record could be None
-    if not getattr(tile_record, "action_taken", False):
+    if not tile_record.action_taken:
         return redirect(url_for("main.get_tile", player_id=player_id))
 
     # At this point the previous tile was actioned; generate a fresh tile for the player (GET)
