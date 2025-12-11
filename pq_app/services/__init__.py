@@ -6,5 +6,6 @@ by both web routes and API endpoints.
 """
 
 from .combat_service import CombatService
+from .tile_service import TileService
 
-__all__ = ['CombatService']
+__all__ = ['CombatService', 'TileService']

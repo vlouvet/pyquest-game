@@ -10,7 +10,7 @@ from flask_login import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import model, gameforms, pqMonsters, gameTile
-from .services import CombatService
+from .services import CombatService, TileService
 from sqlalchemy import select
 
 # Create Blueprint
@@ -170,6 +170,7 @@ def char_start(id):
 @main_bp.route("/player/<int:player_id>/play", methods=["GET"])
 @login_required
 def get_tile(player_id):
+    """Display the current tile for a player"""
     # Authorization check
     if current_user.id != player_id:
         abort(403)
@@ -182,49 +183,33 @@ def get_tile(player_id):
     if not user_profile.is_alive:
         return redirect(url_for("main.game_over", player_id=player_id))
 
-    tile_config = gameTile.pqGameTile()
-    # Find the active playthrough (where ended_at is NULL)
-    active_playthrough = (
-        model.Playthrough.query.filter_by(user_id=player_id, ended_at=None)
-        .order_by(model.Playthrough.started_at.desc())
-        .first()
-    )
-
+    # Initialize tile service
+    tile_service = TileService()
+    
+    # Find the active playthrough
+    active_playthrough = tile_service.get_active_playthrough(player_id)
     if not active_playthrough:
-        # No active journey; redirect to dashboard to start a new one
         flash("No active journey found. Please start a new journey.")
         return redirect(url_for("main.greet_user"))
 
     # Get the most recent tile from the active playthrough
-    tile_details = (
-        model.Tile.query.filter_by(user_id=player_id, playthrough_id=active_playthrough.id)
-        .order_by(model.Tile.id.desc())
-        .first()
-    )
-
+    tile_details = tile_service.get_latest_tile(player_id, active_playthrough.id)
     if not tile_details:
-        # No tile found for this player in active playthrough; redirect to setup
         flash("No tile found for this player; please set up your character or generate a tile.")
         return redirect(url_for("main.setup_char", player_id=player_id))
+    
+    # Get tile data including type and allowed actions
+    tile_data = tile_service.get_tile_data(tile_details.id)
+    
+    # Prepare form
     form = gameforms.TileForm(obj=tile_details)
-    # populate the hidden/read-only tile id into the field data so templates can read it
     form.tileid.data = str(tile_details.id)
-    # set the form type data to the name value from the TileTypeOption table using tile_details.type as a foreign key
-    tile_type_obj = model.db.session.get(model.TileTypeOption, tile_details.type)
-    form.type.data = tile_type_obj.name if tile_type_obj else None
-    if form.type.data == "sign":
-        form.content.data = tile_config.generate_signpost()
-    elif form.type.data == "monster":
-        monster = pqMonsters.NPCMonster()
-        form.content.data = monster.name
-    elif form.type.data == "scene":
-        form.content.data = "This is a scene tile"
-    elif form.type.data == "treasure":
-        form.content.data = "This is a treasure tile"
-    # if the tile_details exists check if action taken
-    # if tile action_taken is not null, render the tile details in read only form
-    if tile_details and tile_details.action_taken:
-        # set the form action choices to the action option selected for this tile record
+    form.type.data = tile_data.tile_type_name
+    form.content.data = tile_details.content
+    
+    # Check if tile has been actioned (readonly mode)
+    if tile_details.action_taken:
+        # Show the actions that were taken
         form.action.choices = [
             (action_option.code or str(action_option.id), action_option.name)
             for action_option in model.ActionOption.query.join(
@@ -253,6 +238,7 @@ def get_tile(player_id):
 @main_bp.route("/player/<int:player_id>/game/tile/next", methods=["POST", "GET"])
 @login_required
 def generate_tile(player_id):
+    """Generate the next tile for a player"""
     # Authorization check
     if current_user.id != player_id:
         abort(403)
@@ -264,12 +250,18 @@ def generate_tile(player_id):
     # Check if player is dead
     if not user_profile.is_alive:
         return redirect(url_for("main.game_over", player_id=player_id))
-    # get last tile record for the user
-    tile_record = model.Tile.query.filter_by(user_id=player_id).order_by(model.Tile.id.desc()).first()
-    # if no tile record exists, redirect to the tile page which will handle prompting setup
+    
+    # Initialize tile service
+    tile_service = TileService()
+    
+    # Get last tile record for the user
+    tile_record = tile_service.get_latest_tile(player_id)
+    
+    # If no tile record exists, redirect to the tile page which will handle prompting setup
     if not tile_record:
         return redirect(url_for("main.get_tile", player_id=player_id))
-    # if the tile has not been actioned redirect to that tile page
+    
+    # If the tile has not been actioned redirect to that tile page
     if not tile_record.action_taken:
         return redirect(url_for("main.get_tile", player_id=player_id))
 
@@ -303,11 +295,13 @@ def generate_tile(player_id):
     model.db.session.add(current_tile)
     model.db.session.commit()
 
-    # Prepare the form for the newly-created tile
+    # Get tile data for the newly-created tile
+    tile_data = tile_service.get_tile_data(current_tile.id)
+    
+    # Prepare the form
     tile_details = gameforms.TileForm(obj=current_tile)
-    # populate the hidden/read-only tile id into the field data so templates can read it
     tile_details.tileid.data = str(current_tile.id)
-    tile_details.type.data = tile_type_name
+    tile_details.type.data = tile_data.tile_type_name
     tile_details.content.data = current_tile.content
     # Filter available actions based on tile type (same as get_tile)
     all_actions = model.ActionOption.query.order_by(model.ActionOption.name).all()
@@ -322,15 +316,18 @@ def generate_tile(player_id):
         allowed_actions = all_actions
 
     tile_details.action.choices = [
-        (tileaction.code or str(tileaction.id), tileaction.name) for tileaction in allowed_actions
+        (action.code or str(action.id), action.name) 
+        for action in tile_data.allowed_actions
     ]
 
-    return render_template("gameTile.html", player_char=user_profile, form=tile_details)
+    return render_template("gameTile.html", player_char=user_profile, form=tile_details, 
+                         tile_type_obj=tile_data.tile_type_obj)
 
 
 @main_bp.route("/player/<int:player_id>/start_journey", methods=["POST"])
 @login_required
 def start_journey(player_id):
+    """Start a new journey/playthrough for a player"""
     # Authorization check
     if current_user.id != player_id:
         abort(403)
