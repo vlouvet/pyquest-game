@@ -1,7 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
+from datetime import datetime, timezone
 
 db = SQLAlchemy()
 
@@ -24,7 +24,7 @@ class User(Model, UserMixin):
     level = db.Column(db.Integer, default=1)
     playerclass = db.Column(db.Integer, db.ForeignKey("playerclass.id"))
     playerrace = db.Column(db.Integer, db.ForeignKey("playerrace.id"))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     tiles = db.relationship("Tile", backref="user", lazy=True)
@@ -78,7 +78,7 @@ class Tile(Model):
     action = db.Column(db.Integer, db.ForeignKey("action.id"))
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
     content = db.Column(db.String)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships - specify foreign_keys to resolve ambiguity
     tile_type = db.relationship("TileTypeOption", foreign_keys=[type], backref="tiles")
