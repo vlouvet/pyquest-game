@@ -1,6 +1,11 @@
 <div id="tile-mount">
     <h1>PyQuest Game</h1>
     <h2>Tile # {{ form.tileid.data }}</h2>
+    {% if ascii_art %}
+    <pre class="ascii-art">{{ ascii_art }}</pre>
+    {% elif tile_type_obj and tile_type_obj.ascii_art %}
+    <pre class="ascii-art">{{ tile_type_obj.ascii_art }}</pre>
+    {% endif %}
     <form id="tile-form-inner" action="/player/{{ player_char.id }}/game/tile/next" method="post">
         {{ form.csrf_token }}
         <div>{{ form.type.label }}: {{ form.type }}</div>

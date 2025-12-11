@@ -6,6 +6,11 @@
     <h1>PyQuest Game</h1>
     <h2>Tile # {{form.tileid}}</h2>
     <div id="tile-mount">
+        {% if ascii_art %}
+        <pre class="ascii-art">{{ ascii_art }}</pre>
+        {% elif tile_type_obj and tile_type_obj.ascii_art %}
+        <pre class="ascii-art">{{ tile_type_obj.ascii_art }}</pre>
+        {% endif %}
         <form id="tile-form" action="/player/{{player_char.id}}/game/tile/next" method="post">
             {{ form.csrf_token }}
             <div>{{ form.type.label }}: {{ form.type }}</div>
@@ -23,12 +28,36 @@
         {% endif %}
     </div>
 
+    <!-- Combat Action Modal -->
+    <div id="combat-modal" class="modal" style="display: none;">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Choose Your Combat Action</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="combat-actions-grid" class="combat-actions-grid">
+                    <!-- Actions will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
     (function(){
         var form = document.getElementById('tile-form');
         var takeBtn = document.getElementById('take-action');
         var feedback = document.getElementById('action-feedback');
+        var modal = document.getElementById('combat-modal');
+        var modalClose = modal ? modal.querySelector('.modal-close') : null;
+        var modalOverlay = modal ? modal.querySelector('.modal-overlay') : null;
+        
         if (!form || !takeBtn) return;
+
+        var playerId = '{{player_char.id}}';
+        var tileId = '{{form.tileid.data}}';
+        var tileType = '{{form.type.data}}';
 
         function showFeedback(msg, isError){
             feedback.textContent = msg;
@@ -37,14 +66,166 @@
             if (!isError) setTimeout(function(){ feedback.style.display = 'none'; }, 4000);
         }
 
+        function showModal() {
+            if (modal) {
+                modal.style.display = 'block';
+                setTimeout(function(){ modal.classList.add('show'); }, 10);
+            }
+        }
+
+        function hideModal() {
+            if (modal) {
+                modal.classList.remove('show');
+                setTimeout(function(){ modal.style.display = 'none'; }, 300);
+            }
+        }
+
+        function loadCombatActions() {
+            var actionsGrid = document.getElementById('combat-actions-grid');
+            if (!actionsGrid) return;
+
+            actionsGrid.innerHTML = '<div class="loading">Loading combat actions...</div>';
+
+            fetch('/player/' + playerId + '/game/tile/' + tileId + '/combat-actions', {
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                credentials: 'same-origin'
+            }).then(function(resp){
+                if (!resp.ok) throw new Error('Failed to load actions');
+                return resp.json();
+            }).then(function(data){
+                renderCombatActions(data.available_actions);
+            }).catch(function(err){
+                actionsGrid.innerHTML = '<div class="error">Failed to load combat actions</div>';
+            });
+        }
+
+        function renderCombatActions(actions) {
+            var actionsGrid = document.getElementById('combat-actions-grid');
+            if (!actionsGrid) return;
+
+            if (!actions || actions.length === 0) {
+                actionsGrid.innerHTML = '<div class="no-actions">No combat actions available</div>';
+                return;
+            }
+
+            actionsGrid.innerHTML = '';
+
+            actions.forEach(function(action){
+                var actionCard = document.createElement('div');
+                actionCard.className = 'combat-action-card';
+                
+                var icon = getCombatIcon(action.code);
+                var damageInfo = '';
+                var healInfo = '';
+                var defenseInfo = '';
+                
+                if (action.damage_max > 0) {
+                    damageInfo = '<div class="stat damage">⚔️ ' + action.damage_min + '-' + action.damage_max + ' dmg</div>';
+                }
+                if (action.heal_amount > 0) {
+                    healInfo = '<div class="stat heal">❤️ +' + action.heal_amount + ' HP</div>';
+                }
+                if (action.defense_boost > 0) {
+                    defenseInfo = '<div class="stat defense">🛡️ +' + action.defense_boost + ' def</div>';
+                }
+                
+                var classReq = action.requires_class ? '<span class="requirement">' + action.requires_class + '</span>' : '';
+                var raceReq = action.requires_race ? '<span class="requirement">' + action.requires_race + '</span>' : '';
+                
+                actionCard.innerHTML = 
+                    '<div class="action-icon">' + icon + '</div>' +
+                    '<div class="action-name">' + action.name + classReq + raceReq + '</div>' +
+                    '<div class="action-description">' + (action.description || '') + '</div>' +
+                    '<div class="action-stats">' + damageInfo + healInfo + defenseInfo + '</div>' +
+                    '<div class="action-success">Success: ' + action.success_rate + '%</div>';
+                
+                actionCard.dataset.code = action.code;
+                actionCard.addEventListener('click', function(){
+                    executeCombatAction(action.code);
+                });
+                
+                actionsGrid.appendChild(actionCard);
+            });
+        }
+
+        function getCombatIcon(code) {
+            var icons = {
+                'attack_light': '⚔️',
+                'attack_heavy': '🗡️',
+                'fireball': '🔥',
+                'power_strike': '💪',
+                'divine_heal': '✨',
+                'heal': '💊',
+                'defend': '🛡️',
+                'flee': '🏃',
+                'elven_grace': '🌿',
+                'pandarian_calm': '☯️'
+            };
+            return icons[code] || '⚡';
+        }
+
+        function executeCombatAction(combatActionCode) {
+            hideModal();
+            
+            if (takeBtn.dataset.sending === '1') return;
+            takeBtn.dataset.sending = '1';
+            takeBtn.disabled = true;
+
+            var actionUrl = takeBtn.getAttribute('formaction') || form.action;
+            var fd = new FormData(form);
+            fd.append('combat_action_code', combatActionCode);
+
+            fetch(actionUrl, {
+                method: 'POST',
+                body: fd,
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+                credentials: 'same-origin'
+            }).then(function(resp){
+                return resp.json().then(function(data){
+                    if (!resp.ok) throw data;
+                    return data;
+                });
+            }).then(function(data){
+                if (data.redirect) {
+                    window.location = data.redirect;
+                    return;
+                }
+                if (data.action_result) showFeedback(data.action_result, false);
+                if (data.tile_html) {
+                    var mount = document.getElementById('tile-mount');
+                    if (mount) mount.innerHTML = data.tile_html;
+                }
+            }).catch(function(err){
+                var msg = (err && err.error) || (err && err.message) || 'Unexpected server error';
+                showFeedback(msg, true);
+            }).finally(function(){
+                takeBtn.dataset.sending = '0';
+                takeBtn.disabled = false;
+            });
+        }
+
         takeBtn.addEventListener('click', function(e){
             e.preventDefault();
 
             var select = form.querySelector('select[name="action"]');
-            if (select && select.value === 'quit' && !confirm('Are you sure you want to quit this adventure?')) {
+            var selectedAction = select ? select.value : '';
+            
+            // Check if this is a "fight" action on a monster tile
+            var actionOption = select ? select.options[select.selectedIndex] : null;
+            var actionName = actionOption ? actionOption.textContent.toLowerCase() : '';
+            
+            if (selectedAction === 'quit' && !confirm('Are you sure you want to quit this adventure?')) {
                 return;
             }
 
+            // Show combat modal for "fight" action on monster tiles
+            if ((selectedAction === 'fight' || actionName.includes('fight')) && tileType === 'monster') {
+                loadCombatActions();
+                showModal();
+                return;
+            }
+
+            // Execute regular action
             if (takeBtn.dataset.sending === '1') return;
             takeBtn.dataset.sending = '1';
             takeBtn.disabled = true;
@@ -80,6 +261,21 @@
                 takeBtn.disabled = false;
             });
         }, false);
+
+        // Modal close handlers
+        if (modalClose) {
+            modalClose.addEventListener('click', hideModal);
+        }
+        if (modalOverlay) {
+            modalOverlay.addEventListener('click', hideModal);
+        }
+
+        // Close modal on ESC key
+        document.addEventListener('keydown', function(e){
+            if (e.key === 'Escape' && modal && modal.style.display === 'block') {
+                hideModal();
+            }
+        });
     })();
     </script>
     {% endblock %}

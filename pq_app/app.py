@@ -1,6 +1,5 @@
 import random
 from typing import cast
-from datetime import datetime, timezone
 from flask import Blueprint, request, render_template, redirect, url_for, flash, abort, jsonify
 from flask_login import (
     login_user,
@@ -10,7 +9,7 @@ from flask_login import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import model, gameforms, pqMonsters, gameTile
-from sqlalchemy import select
+from .services import CombatService, TileService, MediaService
 
 # Create Blueprint
 main_bp = Blueprint("main", __name__)
@@ -110,7 +109,6 @@ def setup_char(player_id):
         # Manually set playerclass and playerrace from form data
         user_profile.playerclass = form.charclass.data
         user_profile.playerrace = form.charrace.data
-
         # if no tile exists for this user, create a tile
         if not model.Tile.query.filter_by(user_id=user_profile_id).first():
             # create a new playthrough for this user and the initial tile
@@ -122,7 +120,6 @@ def setup_char(player_id):
             current_tile.user_id = user_profile_id
             current_tile.type = tile_type["id"]
             current_tile.playthrough_id = new_play.id
-
             # Generate and save content to database based on tile type
             tile_config = gameTile.pqGameTile()
             if tile_type["name"] == "sign":
@@ -134,7 +131,6 @@ def setup_char(player_id):
                 current_tile.content = "This is a scene tile"
             elif tile_type["name"] == "treasure":
                 current_tile.content = "This is a treasure tile"
-
             model.db.session.add(current_tile)
         form = gameforms.TileForm()
         form.type.data = tile_type["name"]
@@ -172,6 +168,7 @@ def char_start(id):
 @main_bp.route("/player/<int:player_id>/play", methods=["GET"])
 @login_required
 def get_tile(player_id):
+    """Display the current tile for a player"""
     # Authorization check
     if current_user.id != player_id:
         abort(403)
@@ -184,49 +181,37 @@ def get_tile(player_id):
     if not user_profile.is_alive:
         return redirect(url_for("main.game_over", player_id=player_id))
 
-    tile_config = gameTile.pqGameTile()
-    # Find the active playthrough (where ended_at is NULL)
-    active_playthrough = (
-        model.Playthrough.query.filter_by(user_id=player_id, ended_at=None)
-        .order_by(model.Playthrough.started_at.desc())
-        .first()
-    )
-
+    # Initialize services
+    tile_service = TileService()
+    media_service = MediaService()
+    
+    # Find the active playthrough
+    active_playthrough = tile_service.get_active_playthrough(player_id)
     if not active_playthrough:
-        # No active journey; redirect to dashboard to start a new one
         flash("No active journey found. Please start a new journey.")
         return redirect(url_for("main.greet_user"))
 
     # Get the most recent tile from the active playthrough
-    tile_details = (
-        model.Tile.query.filter_by(user_id=player_id, playthrough_id=active_playthrough.id)
-        .order_by(model.Tile.id.desc())
-        .first()
-    )
-
+    tile_details = tile_service.get_latest_tile(player_id, active_playthrough.id)
     if not tile_details:
-        # No tile found for this player in active playthrough; redirect to setup
         flash("No tile found for this player; please set up your character or generate a tile.")
         return redirect(url_for("main.setup_char", player_id=player_id))
+    
+    # Get tile data including type and allowed actions
+    tile_data = tile_service.get_tile_data(tile_details.id)
+    
+    # Get media for the tile
+    ascii_art = media_service.get_tile_display_media(tile_details.id)
+    
+    # Prepare form
     form = gameforms.TileForm(obj=tile_details)
-    # populate the hidden/read-only tile id into the field data so templates can read it
     form.tileid.data = str(tile_details.id)
-    # set the form type data to the name value from the TileTypeOption table using tile_details.type as a foreign key
-    tile_type_obj = model.db.session.get(model.TileTypeOption, tile_details.type)
-    form.type.data = tile_type_obj.name if tile_type_obj else None
-    if form.type.data == "sign":
-        form.content.data = tile_config.generate_signpost()
-    elif form.type.data == "monster":
-        monster = pqMonsters.NPCMonster()
-        form.content.data = monster.name
-    elif form.type.data == "scene":
-        form.content.data = "This is a scene tile"
-    elif form.type.data == "treasure":
-        form.content.data = "This is a treasure tile"
-    # if the tile_details exists check if action taken
-    # if tile action_taken is not null, render the tile details in read only form
-    if tile_details and tile_details.action_taken:
-        # set the form action choices to the action option selected for this tile record
+    form.type.data = tile_data.tile_type_name
+    form.content.data = tile_details.content
+    
+    # Check if tile has been actioned (readonly mode)
+    if tile_details.action_taken:
+        # Show the actions that were taken
         form.action.choices = [
             (action_option.code or str(action_option.id), action_option.name)
             for action_option in model.ActionOption.query.join(
@@ -235,27 +220,22 @@ def get_tile(player_id):
             .filter(model.Action.tile == tile_details.id)
             .order_by(model.ActionOption.name)
         ]
-        return render_template("gameTile.html", player_char=user_profile, form=form, readonly=True)
+        return render_template("gameTile.html", player_char=user_profile, form=form, 
+                             tile_type_obj=tile_data.tile_type_obj, ascii_art=ascii_art, readonly=True)
 
-    # Filter available actions based on tile type
-    all_actions = model.ActionOption.query.order_by(model.ActionOption.name).all()
-    if form.type.data == "sign":
-        # Sign tiles only allow rest, inspect, and quit
-        allowed_actions = [a for a in all_actions if a.name in ["rest", "inspect", "quit"]]
-    elif form.type.data == "treasure":
-        # Treasure tiles disable fight
-        allowed_actions = [a for a in all_actions if a.name != "fight"]
-    else:
-        # Other tile types (monster, scene) allow all actions
-        allowed_actions = all_actions
-
-    form.action.choices = [(tileaction.code or str(tileaction.id), tileaction.name) for tileaction in allowed_actions]
-    return render_template("gameTile.html", player_char=user_profile, form=form)
+    # Active tile - show available actions
+    form.action.choices = [
+        (action.code or str(action.id), action.name) 
+        for action in tile_data.allowed_actions
+    ]
+    return render_template("gameTile.html", player_char=user_profile, form=form, 
+                         tile_type_obj=tile_data.tile_type_obj, ascii_art=ascii_art)
 
 
 @main_bp.route("/player/<int:player_id>/game/tile/next", methods=["POST", "GET"])
 @login_required
 def generate_tile(player_id):
+    """Generate the next tile for a player"""
     # Authorization check
     if current_user.id != player_id:
         abort(403)
@@ -267,12 +247,18 @@ def generate_tile(player_id):
     # Check if player is dead
     if not user_profile.is_alive:
         return redirect(url_for("main.game_over", player_id=player_id))
-    # get last tile record for the user
-    tile_record = model.Tile.query.filter_by(user_id=player_id).order_by(model.Tile.id.desc()).first()
-    # if no tile record exists, redirect to the tile page which will handle prompting setup
+    
+    # Initialize tile service
+    tile_service = TileService()
+    
+    # Get last tile record for the user
+    tile_record = tile_service.get_latest_tile(player_id)
+    
+    # If no tile record exists, redirect to the tile page which will handle prompting setup
     if not tile_record:
         return redirect(url_for("main.get_tile", player_id=player_id))
-    # if the tile has not been actioned redirect to that tile page
+    
+    # If the tile has not been actioned redirect to that tile page
     if not tile_record.action_taken:
         return redirect(url_for("main.get_tile", player_id=player_id))
 
@@ -292,7 +278,6 @@ def generate_tile(player_id):
     tile_config = gameTile.pqGameTile()
     tile_type_obj = model.db.session.get(model.TileTypeOption, current_tile.type)
     tile_type_name = tile_type_obj.name if tile_type_obj else None
-
     if tile_type_name == "sign":
         current_tile.content = tile_config.generate_signpost()
     elif tile_type_name == "monster":
@@ -307,13 +292,14 @@ def generate_tile(player_id):
     model.db.session.add(current_tile)
     model.db.session.commit()
 
-    # Prepare the form for the newly-created tile
+    # Get tile data for the newly-created tile
+    tile_data = tile_service.get_tile_data(current_tile.id)
+    
+    # Prepare the form
     tile_details = gameforms.TileForm(obj=current_tile)
-    # populate the hidden/read-only tile id into the field data so templates can read it
     tile_details.tileid.data = str(current_tile.id)
-    tile_details.type.data = tile_type_name
+    tile_details.type.data = tile_data.tile_type_name
     tile_details.content.data = current_tile.content
-
     # Filter available actions based on tile type (same as get_tile)
     all_actions = model.ActionOption.query.order_by(model.ActionOption.name).all()
     if tile_details.type.data == "sign":
@@ -327,15 +313,18 @@ def generate_tile(player_id):
         allowed_actions = all_actions
 
     tile_details.action.choices = [
-        (tileaction.code or str(tileaction.id), tileaction.name) for tileaction in allowed_actions
+        (action.code or str(action.id), action.name)
+        for action in tile_data.allowed_actions
     ]
 
-    return render_template("gameTile.html", player_char=user_profile, form=tile_details)
+    return render_template("gameTile.html", player_char=user_profile, form=tile_details,
+                         tile_type_obj=tile_data.tile_type_obj)
 
 
 @main_bp.route("/player/<int:player_id>/start_journey", methods=["POST"])
 @login_required
 def start_journey(player_id):
+    """Start a new journey/playthrough for a player"""
     # Authorization check
     if current_user.id != player_id:
         abort(403)
@@ -373,7 +362,6 @@ def start_journey(player_id):
         current_tile.content = "This is a scene tile"
     elif tile_type_name == "treasure":
         current_tile.content = "This is a treasure tile"
-
     model.db.session.add(current_tile)
     model.db.session.commit()
 
@@ -383,14 +371,16 @@ def start_journey(player_id):
 @main_bp.route("/player/<int:playerid>/game/tile/<int:tile_id>/action", methods=["POST"])
 @login_required
 def execute_tile_action(playerid, tile_id):
+    """Execute an action on a tile using CombatService"""
     # Authorization check
     if current_user.id != playerid:
         abort(403)
+    
     # Accept either ActionOption.code (string) or numeric id in the posted `action` field.
     if request.method != "POST":
         return {"status_code": 402}
 
-    # detect AJAX/JSON requests - only check X-Requested-With header for stricter detection
+    # Detect AJAX/JSON requests - only check X-Requested-With header for stricter detection
     is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
     action_post_value = request.form.get("action")
@@ -399,146 +389,84 @@ def execute_tile_action(playerid, tile_id):
             return jsonify(error="No action selected"), 400
         abort(400, description="No action selected")
 
-    # Resolve ActionOption: prefer lookup by code; if not found and value is numeric, lookup by id.
-    action_option = None
-    action_name = None
-    # Try lookup by code first
-    if action_post_value:
-        action_option = model.ActionOption.query.filter_by(code=action_post_value).one_or_none()
-    # Fallback to numeric id
-    if not action_option and action_post_value and action_post_value.isdigit():
-        action_option = model.db.session.get(model.ActionOption, int(action_post_value))
-    # Last resort: lookup by name
-    if not action_option:
-        action_option = model.ActionOption.query.filter_by(name=action_post_value).one_or_none()
-
-    if action_option:
-        action_name = action_option.name
-    else:
-        action_name = "unknown"
+    # Initialize combat service
+    combat_service = CombatService()
+    
+    # Resolve ActionOption
+    action_option = combat_service.get_action_by_value(action_post_value)
+    action_name = action_option.name if action_option else "unknown"
 
     # Use a transactional nested block and acquire a row-level lock on the tile to prevent races
     with model.db.session.begin_nested():
-        stmt = select(model.Tile).where(model.Tile.id == tile_id).with_for_update()
-        tile_record = model.db.session.execute(stmt).scalar_one_or_none()
+        tile_record = combat_service.get_tile_with_lock(tile_id)
 
-        # Ensure the tile exists and hasn't already been actioned
-        if not tile_record:
-            if is_ajax:
-                return jsonify(error="Tile not found"), 400
-            abort(400, description="Tile not found")
-        if tile_record.action_taken:
-            # Redirect to get_tile to show the tile in readonly mode instead of erroring
-            if is_ajax:
-                return jsonify(redirect=url_for("main.get_tile", player_id=playerid)), 200
-            return redirect(url_for("main.get_tile", player_id=playerid))
+        # Validate tile
+        is_valid, error_msg = combat_service.validate_tile_action(tile_record)
+        if not is_valid:
+            if error_msg == "Tile already actioned":
+                # Redirect to get_tile to show the tile in readonly mode
+                if is_ajax:
+                    return jsonify(redirect=url_for("main.get_tile", player_id=playerid)), 200
+                return redirect(url_for("main.get_tile", player_id=playerid))
+            else:
+                # Tile not found or other error
+                if is_ajax:
+                    return jsonify(error=error_msg), 400
+                abort(400, description=error_msg)
 
-        # Resolve action history existence
-        actionverb_id = action_option.id if action_option else None
-        action_record = None
-        if actionverb_id is not None:
-            action_record = model.Action.query.filter_by(tile=tile_id, actionverb=actionverb_id).first()
-
-        # handle player and apply action semantics
+        # Get player
         player_record = model.db.session.get(model.User, playerid)
         if not player_record:
             if is_ajax:
                 return jsonify(error="Player not found"), 400
             abort(400, description="Player not found")
 
-        # Apply action semantics and capture a short result message
-        action_result = None
+        # Get tile type
         tile_type = model.db.session.get(model.TileTypeOption, tile_record.type)
         tile_type_name = tile_type.name if tile_type else None
 
-        if action_name == "rest":
-            # Check if resting on a monster tile
-            if tile_type_name == "monster":
-                # Lose 50% of HP or 10 HP, whichever is greater
-                damage = max(int(player_record.hitpoints * 0.5), 10)
-                player_record.take_damage(damage)
-                action_result = f"Resting near a monster is dangerous! You lost {damage} HP."
-                flash(action_result)
-            else:
-                player_record.heal(10)
-                action_result = "You rest and recover 10 HP."
-                flash(action_result)
+        # Check for combat_action_code parameter (for enhanced combat)
+        combat_action_code = request.form.get("combat_action_code")
 
-        elif action_name == "fight":
-            damage = random.randint(5, 20)
-            player_record.take_damage(damage)
-            action_result = f"You fought bravely and took {damage} damage!"
-            flash(action_result)
+        # Execute action using combat service
+        combat_result = combat_service.execute_action(
+            player=player_record,
+            tile=tile_record,
+            action_name=action_name,
+            tile_type_name=tile_type_name,
+            combat_action_code=combat_action_code
+        )
 
-        elif action_name == "inspect":
-            if tile_type_name == "monster":
-                action_result = "You carefully observe the creature, learning its patterns."
-            elif tile_type_name == "treasure":
-                # 1% chance to restore all HP
-                if random.randint(1, 100) == 1:
-                    max_hp = 100  # Assuming max HP is 100
-                    healed = max_hp - player_record.hitpoints
-                    player_record.hitpoints = max_hp
-                    action_result = f"You found a magical healing artifact! Restored {healed} HP to full health!"
-                else:
-                    action_result = "You inspect the area and find hints of treasure nearby."
-            else:
-                action_result = "You take a moment to examine your surroundings carefully."
-            flash(action_result)
+        # Get or create action record for history tracking
+        action_history_id = combat_service.get_or_create_action_record(
+            tile_id=tile_id,
+            action_name=action_name,
+            action_option=action_option
+        )
 
-        elif action_name == "quit":
-            action_result = "You decide to retreat from this challenge."
-            flash(action_result)
-            # mark the playthrough as ended
-            try:
-                if tile_record and tile_record.playthrough_id:
-                    pt = model.db.session.get(model.Playthrough, tile_record.playthrough_id)
-                    if pt:
-                        pt.ended_at = datetime.now(timezone.utc)
-                        model.db.session.add(pt)
-            except Exception:
-                # don't let playthrough ending failures block the response
-                model.db.session.rollback()
+        # Complete the tile action
+        combat_service.complete_tile_action(
+            tile=tile_record,
+            player=player_record,
+            action_history_id=action_history_id
+        )
 
-        else:
-            action_result = f"Performed action: {action_name}"
-            flash(action_result)
-
-        # Create Action record for history tracking (or reuse existing)
-        if not action_record:
-            new_action = model.Action()
-            new_action.name = action_name
-            new_action.tile = tile_id
-            new_action.actionverb = actionverb_id
-            model.db.session.add(new_action)
-            model.db.session.flush()
-            action_history_id = new_action.id
-        else:
-            action_history_id = action_record.id
-
-        # Link tile to action history and mark action taken
-        tile_record.user_id = player_record.id
-        tile_record.action = action_history_id
-        tile_record.action_taken = True
-        model.db.session.add(tile_record)
-        model.db.session.add(player_record)
-
-    # transaction committed here
+    # Transaction committed here
 
     # Check if player is still alive after action
-    if not player_record.is_alive:
+    if not combat_result.player_alive:
         if is_ajax:
             return jsonify(error="You have fallen in battle..."), 200
         flash("You have fallen in battle...")
         return redirect(url_for("main.game_over", player_id=playerid))
 
     # If the player chose to quit, end the journey and return to the main/dashboard
-    if action_name == "quit":
+    if combat_result.should_end_playthrough:
         if is_ajax:
             return jsonify(ok=True, redirect=url_for("main.greet_user"))
         return redirect(url_for("main.greet_user"))
 
-    # Render readonly tile view including the action result so the user sees the outcome
+    # Render readonly tile view including the action result
     tile_details = model.db.session.get(model.Tile, tile_id)
     form = gameforms.TileForm(obj=tile_details)
     form.tileid.data = str(tile_details.id)
@@ -550,16 +478,86 @@ def execute_tile_action(playerid, tile_id):
         .filter(model.Action.tile == tile_details.id)
         .order_by(model.ActionOption.name)
     ]
+    
+    # Get media for the tile
+    media_service = MediaService()
+    ascii_art = media_service.get_tile_display_media(tile_id)
 
-    # If the client expects JSON (AJAX), return the action result and an HTML fragment for the updated tile
+    # If the client expects JSON (AJAX), return the action result and an HTML fragment
     if is_ajax:
         tile_html = render_template(
-            "_tile_fragment.html", player_char=player_record, form=form, readonly=True, action_result=action_result
+            "_tile_fragment.html",
+            player_char=player_record,
+            form=form,
+            tile_type_obj=tile_type_obj,
+            ascii_art=ascii_art,
+            readonly=True,
+            action_result=combat_result.message
         )
-        return jsonify(ok=True, action_result=action_result, tile_html=tile_html)
+        return jsonify(ok=True, action_result=combat_result.message, tile_html=tile_html)
 
     return render_template(
-        "gameTile.html", player_char=player_record, form=form, readonly=True, action_result=action_result
+        "gameTile.html",
+        player_char=player_record,
+        form=form,
+        tile_type_obj=tile_type_obj,
+        ascii_art=ascii_art,
+        readonly=True,
+        action_result=combat_result.message
+    )
+
+
+@main_bp.route("/player/<int:player_id>/game/tile/<int:tile_id>/combat-actions", methods=["GET"])
+@login_required
+def get_combat_actions(player_id, tile_id):
+    """
+    Get available combat actions for a player on a specific tile.
+    Returns JSON list of available CombatActions filtered by class/race.
+    """
+    # Verify player
+    player = model.db.session.get(model.User, player_id)
+    if not player:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(error="Player not found"), 404
+        abort(404, description="Player not found")
+    
+    # Verify tile
+    tile = model.db.session.get(model.Tile, tile_id)
+    if not tile:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(error="Tile not found"), 404
+        abort(404, description="Tile not found")
+    
+    # Get tile type
+    tile_type = model.db.session.get(model.TileTypeOption, tile.type)
+    tile_type_name = tile_type.name if tile_type else None
+    
+    # Get available actions
+    combat_service = CombatService()
+    actions = combat_service.get_available_actions(player, tile_type_name)
+    
+    # Format for JSON response
+    actions_data = [
+        {
+            "id": action.id,
+            "code": action.code,
+            "name": action.name,
+            "description": action.description,
+            "damage_min": action.damage_min,
+            "damage_max": action.damage_max,
+            "heal_amount": action.heal_amount,
+            "defense_boost": action.defense_boost,
+            "success_rate": action.success_rate,
+            "requires_class": action.required_class.name if action.required_class else None,
+            "requires_race": action.required_race.name if action.required_race else None
+        }
+        for action in actions
+    ]
+    
+    return jsonify(
+        tile_id=tile_id,
+        tile_type=tile_type_name,
+        available_actions=actions_data
     )
 
 
@@ -659,3 +657,153 @@ def restart_game(player_id):
 
     flash("Your adventure begins anew!")
     return redirect(url_for("main.setup_char", player_id=player_id))
+
+
+# ============================================================================
+# Media Management Endpoints
+# ============================================================================
+
+@main_bp.route("/admin/media/upload", methods=["POST"])
+@login_required
+def upload_media():
+    """
+    Upload or create new media for a tile type.
+    Supports both ASCII art (text) and image URLs.
+    """
+    tile_type_id = request.form.get("tile_type_id")
+    media_type = request.form.get("media_type", "ascii_art")
+    content = request.form.get("content")
+    url = request.form.get("url")
+    is_default = request.form.get("is_default", "false").lower() == "true"
+    
+    if not tile_type_id:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(error="tile_type_id is required"), 400
+        flash("Tile type is required")
+        return redirect(request.referrer or url_for("main.greet_user"))
+    
+    try:
+        tile_type_id = int(tile_type_id)
+    except ValueError:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(error="Invalid tile_type_id"), 400
+        flash("Invalid tile type")
+        return redirect(request.referrer or url_for("main.greet_user"))
+    
+    # Verify tile type exists
+    tile_type = model.db.session.get(model.TileTypeOption, tile_type_id)
+    if not tile_type:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(error="Tile type not found"), 404
+        flash("Tile type not found")
+        return redirect(request.referrer or url_for("main.greet_user"))
+    
+    media_service = MediaService()
+    
+    try:
+        media = media_service.create_media_record(
+            tile_type_id=tile_type_id,
+            media_type=media_type,
+            content=content,
+            url=url,
+            is_default=is_default
+        )
+        
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(
+                success=True,
+                media_id=media.id,
+                message=f"Media created for {tile_type.name}"
+            ), 201
+        
+        flash(f"Media created for {tile_type.name}")
+        return redirect(request.referrer or url_for("main.greet_user"))
+        
+    except Exception as e:
+        model.db.session.rollback()
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(error=str(e)), 500
+        flash(f"Error creating media: {str(e)}")
+        return redirect(request.referrer or url_for("main.greet_user"))
+
+
+@main_bp.route("/admin/media/<string:tile_type_name>", methods=["GET"])
+@login_required
+def list_media(tile_type_name):
+    """
+    List all media for a specific tile type.
+    """
+    tile_type = model.TileTypeOption.query.filter_by(name=tile_type_name).first()
+    if not tile_type:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(error="Tile type not found"), 404
+        abort(404, description="Tile type not found")
+    
+    media_service = MediaService()
+    media_list = media_service.get_media_for_tile_type(tile_type.id)
+    
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return jsonify(
+            tile_type=tile_type_name,
+            media=[
+                {
+                    "id": m.id,
+                    "media_type": m.media_type,
+                    "content": m.content[:100] + "..." if m.content and len(m.content) > 100 else m.content,
+                    "url": m.url,
+                    "is_default": m.is_default,
+                    "display_order": m.display_order
+                }
+                for m in media_list
+            ]
+        )
+    
+    return render_template(
+        "admin_media.html",
+        tile_type=tile_type,
+        media_list=media_list
+    )
+
+
+@main_bp.route("/admin/media/<int:media_id>", methods=["DELETE"])
+@login_required
+def delete_media(media_id):
+    """
+    Delete a media record.
+    """
+    media_service = MediaService()
+    
+    success = media_service.delete_media(media_id)
+    
+    if success:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(success=True, message="Media deleted"), 200
+        flash("Media deleted successfully")
+    else:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(error="Media not found"), 404
+        flash("Media not found")
+    
+    return redirect(request.referrer or url_for("main.greet_user"))
+
+
+@main_bp.route("/admin/media/<int:media_id>/set-default", methods=["POST"])
+@login_required
+def set_default_media(media_id):
+    """
+    Set a media record as the default for its tile type.
+    """
+    media_service = MediaService()
+    
+    success = media_service.set_default_media(media_id)
+    
+    if success:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(success=True, message="Default media updated"), 200
+        flash("Default media updated successfully")
+    else:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(error="Media not found or invalid"), 400
+        flash("Failed to update default media")
+    
+    return redirect(request.referrer or url_for("main.greet_user"))

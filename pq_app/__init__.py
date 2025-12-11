@@ -26,11 +26,21 @@ def create_app(config_name=None):
     from config import config
 
     app.config.from_object(config.get(config_name, config["default"]))
+    
+    # JWT configuration
+    app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', app.config['SECRET_KEY'])
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = 3600  # 1 hour
+    app.config['JWT_REFRESH_TOKEN_EXPIRES'] = 2592000  # 30 days
 
     # Initialize extensions
     model.db.init_app(app)
     login_manager.init_app(app)
     login_manager.login_view = "main.login"
+    
+    # Initialize JWT and rate limiter
+    from .api import jwt, limiter
+    jwt.init_app(app)
+    limiter.init_app(app)
 
     # Create database tables
     # In development and testing we create tables and seed defaults automatically.
@@ -42,8 +52,10 @@ def create_app(config_name=None):
 
     # Register blueprints
     from .app import main_bp
+    from .api import api_v1
 
     app.register_blueprint(main_bp)
+    app.register_blueprint(api_v1)
 
     return app
 
