@@ -95,7 +95,7 @@ class Tile(Model):
 class Action(Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
-    tile = db.Column(db.Integer, db.ForeignKey("tile.id"))
+    tile = db.Column(db.Integer, db.ForeignKey("tile.id", use_alter=True))
     actionverb = db.Column(db.Integer, db.ForeignKey("actionoption.id"))
 
     # Relationships - specify foreign_keys to avoid circular reference issues

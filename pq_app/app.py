@@ -18,6 +18,11 @@ main_bp = Blueprint("main", __name__)
 def register():
     form = gameforms.RegisterForm()
     if form.validate_on_submit():
+        # Prevent duplicate usernames (unique constraint at DB level otherwise raises IntegrityError)
+        existing = model.User.query.filter_by(username=form.username.data).first()
+        if existing:
+            flash("Username already taken. Please choose another.")
+            return render_template("register.html", form=form)
         # form.password.data is typed as Optional[str]; cast to str for the password-hash helper
         hashed_password = generate_password_hash(cast(str, form.password.data), method="pbkdf2:sha256")
         new_user = model.User(username=form.username.data, password_hash=hashed_password)
@@ -79,7 +84,9 @@ def setup_char(player_id):
     if current_user.id != player_id:
         abort(403)
 
-    user_profile = model.User.query.get_or_404(player_id)
+    user_profile = model.db.session.get(model.User, player_id)
+    if not user_profile:
+        abort(404)
 
     # Check if player is dead (except during restart)
     if user_profile.hitpoints <= 0 and user_profile.playerclass:
@@ -125,7 +132,9 @@ def char_start(id):
     if current_user.id != id:
         abort(403)
     # TODO: query db to get user profile
-    user_profile = model.User.query.get_or_404(id)
+    user_profile = model.db.session.get(model.User, id)
+    if not user_profile:
+        abort(404)
 
     # Check if player is dead
     if not user_profile or not user_profile.is_alive:
@@ -143,7 +152,9 @@ def get_tile(player_id):
     if current_user.id != player_id:
         abort(403)
 
-    user_profile = model.User.query.get_or_404(player_id)
+    user_profile = model.db.session.get(model.User, player_id)
+    if not user_profile:
+        abort(404)
 
     # Check if player is dead before showing tile
     if not user_profile.is_alive:
@@ -158,7 +169,7 @@ def get_tile(player_id):
     form = gameforms.TileForm(obj=tile_details)
     form.tileid = tile_details.id
     # set the form type data to the name value from the TileTypeOption table using tile_details.type as a foreign key
-    tile_type_obj = model.TileTypeOption.query.get(tile_details.type)
+    tile_type_obj = model.db.session.get(model.TileTypeOption, tile_details.type)
     form.type.data = tile_type_obj.name if tile_type_obj else None
     if form.type.data == "sign":
         form.content.data = tile_config.generate_signpost()
@@ -193,7 +204,9 @@ def generate_tile(player_id):
     if current_user.id != player_id:
         abort(403)
 
-    user_profile = model.User.query.get_or_404(player_id)
+    user_profile = model.db.session.get(model.User, player_id)
+    if not user_profile:
+        abort(404)
 
     # Check if player is dead
     if not user_profile.is_alive:
@@ -204,40 +217,28 @@ def generate_tile(player_id):
     if not tile_record:
         return redirect(url_for("main.get_tile", player_id=player_id))
     # if the tile has not been actioned redirect to that tile page
-    # use getattr to safely handle cases where action_taken might not exist or tile_record could be None
-    if not getattr(tile_record, "action_taken", False):
+    if not tile_record.action_taken:
         return redirect(url_for("main.get_tile", player_id=player_id))
-    # save the posted form to a var
-    tile_details = gameforms.TileForm()
-    # get the tile type list
+
+    # At this point the previous tile was actioned; generate a fresh tile for the player (GET)
     tile_type_list = [
-        {"name": tile_type.name, "id": tile_type.id} for tile_type in model.TileTypeOption.query.order_by("name")
+        {"name": tile_type.name, "id": tile_type.id} for tile_type in model.TileTypeOption.query.order_by(model.TileTypeOption.name)
     ]
-    # generate a new tile object
-    if not tile_details.action:
-        # re-render the gameTile template and flash an error message reminding the user to action the tile
-        flash("Please action this tile before continuing!")
-        return render_template(
-            "gameTile.html",
-            player_char=user_profile,
-            form=tile_details,
-            errors=tile_details.errors,
-        )
-    # generate the NEXT tile details
+
     current_tile = model.Tile()
     current_tile.type = random.choice(tile_type_list)["id"]
     current_tile.user_id = player_id
-    if tile_details.action.data:
-        current_tile.action = tile_details.action.data
-    else:
-        print("current tile has no action data!")
-    if request.method == "POST":
-        model.db.session.add(current_tile)
-        model.db.session.commit()
-        model.db.session.add(user_profile)
-        model.db.session.commit()
-    # tile_details = (model.Tile.query.filter_by(user_id=player_id).order_by(model.Tile.id.desc()).first())
-    tile_details.tileid = tile_record.id
+
+    model.db.session.add(current_tile)
+    model.db.session.commit()
+
+    # Prepare the form for the newly-created tile
+    tile_details = gameforms.TileForm(obj=current_tile)
+    tile_details.tileid = current_tile.id
+    tile_type_obj = model.db.session.get(model.TileTypeOption, current_tile.type)
+    tile_details.type.data = tile_type_obj.name if tile_type_obj else None
+    tile_details.action.choices = [(tileaction.id, tileaction.name) for tileaction in model.ActionOption.query.order_by(model.ActionOption.name)]
+
     return render_template("gameTile.html", player_char=user_profile, form=tile_details)
 
 
@@ -248,47 +249,44 @@ def execute_tile_action(playerid, tile_id):
     if current_user.id != playerid:
         abort(403)
 
-    tile_record = model.Tile.query.get(tile_id)
+    tile_record = model.db.session.get(model.Tile, tile_id)
     # Get action from request form data
     action_type_ID = request.form.get("action", type=int)
     if request.method == "POST":
         # validate actionID is in the list of valid actions table
         if not action_type_ID:
-            return {"Error": "No action selected"}
+            abort(400, description="No action selected")
         action_record = model.Action.query.filter_by(tile=tile_id, actionverb=action_type_ID).first()
         if action_record:
             print(f"Action_record ID: {action_record.id}")
         # Ensure the tile exists and hasn't already been actioned
         if not tile_record:
-            return {"Error": "Tile not found"}
-        if getattr(tile_record, "action_taken", False):
-            return {"Error": "tile has already been actioned"}
+            abort(400, description="Tile not found")
+        if tile_record.action_taken:
+            abort(400, description="tile has already been actioned")
         # handle rest
-        player_record = model.User.query.get(playerid)
+        player_record = model.db.session.get(model.User, playerid)
         if not player_record:
             return {"Error": "Player not found"}
         print(f"Player_id: {player_record.id}")
 
         # Get action names from database instead of hardcoding IDs
-        action_option = model.ActionOption.query.get(action_type_ID)
+        action_option = model.db.session.get(model.ActionOption, action_type_ID)
         action_name = action_option.name if action_option else "unknown"
 
         if action_name == "rest":
-            tile_record.action = action_type_ID
             player_record.heal(10)
             flash("You rest and recover 10 HP.")
 
         elif action_name == "fight":
-            tile_record.action = action_type_ID
             # Simple combat: player takes random damage
             damage = random.randint(5, 20)
             player_record.take_damage(damage)
             flash(f"You fought bravely and took {damage} damage!")
 
         elif action_name == "inspect":
-            tile_record.action = action_type_ID
             # Get tile type for contextual message
-            tile_type = model.TileTypeOption.query.get(tile_record.type)
+            tile_type = model.db.session.get(model.TileTypeOption, tile_record.type)
             if tile_type and tile_type.name == "monster":
                 flash("You carefully observe the creature, learning its patterns.")
             elif tile_type and tile_type.name == "treasure":
@@ -297,19 +295,24 @@ def execute_tile_action(playerid, tile_id):
                 flash("You take a moment to examine your surroundings carefully.")
 
         elif action_name == "quit":
-            tile_record.action = action_type_ID
             flash("You decide to retreat from this challenge.")
 
-        # Create Action record for history tracking
+        # Create Action record for history tracking (or reuse existing)
         if not action_record:
-            # Create Action record without relying on constructor kwargs (type-checker friendly)
             new_action = model.Action()
             new_action.name = action_name
             new_action.tile = tile_id
             new_action.actionverb = action_type_ID
             model.db.session.add(new_action)
+            # flush to get new_action.id
+            model.db.session.flush()
+            action_history_id = new_action.id
+        else:
+            action_history_id = action_record.id
 
+        # Link tile to action history and mark action taken
         tile_record.user_id = player_record.id
+        tile_record.action = action_history_id
         tile_record.action_taken = True
         model.db.session.add(tile_record)
         model.db.session.add(player_record)
@@ -335,8 +338,7 @@ def get_user_profile(player_id):
     # Authorization check
     if current_user.id != player_id:
         abort(403)
-    user_profile = model.User.query.get_or_404(player_id)
-    # if user is logged in, get the user profile
+    user_profile = model.db.session.get(model.User, player_id)
     if not user_profile:
         return redirect(url_for("main.greet_user"))
     return render_template("profile.html", player_char=user_profile)
@@ -350,7 +352,7 @@ def get_history(player_id):
     if current_user.id != player_id:
         abort(403)
     # get current logged in user profile
-    user_profile = model.User.query.get(player_id)
+    user_profile = model.db.session.get(model.User, player_id)
     tile_history = model.Tile.query.filter_by(user_id=player_id).all()
     return render_template("gameHistory.html", player_char=user_profile, history=tile_history)
 
@@ -363,16 +365,18 @@ def game_over(player_id):
     if current_user.id != player_id:
         abort(403)
 
-    user_profile = model.User.query.get_or_404(player_id)
+    user_profile = model.db.session.get(model.User, player_id)
+    if not user_profile:
+        abort(404)
 
     # Get player class and race names
     player_class_name = None
     player_race_name = None
     if user_profile.playerclass:
-        player_class = model.PlayerClass.query.get(user_profile.playerclass)
+        player_class = model.db.session.get(model.PlayerClass, user_profile.playerclass)
         player_class_name = player_class.name if player_class else "Unknown"
     if user_profile.playerrace:
-        player_race = model.PlayerRace.query.get(user_profile.playerrace)
+        player_race = model.db.session.get(model.PlayerRace, user_profile.playerrace)
         player_race_name = player_race.name if player_race else "Unknown"
 
     # Count tiles explored
@@ -395,7 +399,9 @@ def restart_game(player_id):
     if current_user.id != player_id:
         abort(403)
 
-    user_profile = model.User.query.get_or_404(player_id)
+    user_profile = model.db.session.get(model.User, player_id)
+    if not user_profile:
+        abort(404)
 
     # Reset player stats
     user_profile.hitpoints = user_profile.max_hp

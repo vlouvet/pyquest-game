@@ -47,4 +47,5 @@ def create_app(config_name=None):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return model.User.query.get(int(user_id))
+    # Use Session.get to avoid legacy Query.get API
+    return model.db.session.get(model.User, int(user_id))

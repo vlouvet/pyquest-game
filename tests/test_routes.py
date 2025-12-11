@@ -11,6 +11,7 @@ from pq_app.model import (
     PlayerClass,
     PlayerRace,
     Tile,
+    Action,
     TileTypeOption,
     ActionOption,
 )
@@ -190,7 +191,7 @@ def test_setup_char_post(client, authenticated_user, setup_game_data):
 
     # Verify user was updated
     with client.application.app_context():
-        user = User.query.get(authenticated_user)
+        user = db.session.get(User, authenticated_user)
         # Ensure user exists
         assert user is not None
         assert user.playerclass == player_class.id
@@ -221,7 +222,7 @@ def test_char_start_unauthorized(client, authenticated_user):
 def user_with_character(client, authenticated_user, setup_game_data):
     """Fixture to create a user with character setup complete and a tile."""
     with client.application.app_context():
-        user = User.query.get(authenticated_user)
+        user = db.session.get(User, authenticated_user)
         player_class = PlayerClass.query.first()
         player_race = PlayerRace.query.first()
         tile_type = TileTypeOption.query.first()
@@ -319,7 +320,7 @@ def test_execute_tile_action(client, user_with_character):
 
     # Verify tile was marked as actioned
     with client.application.app_context():
-        tile = Tile.query.get(tile_id)
+        tile = db.session.get(Tile, tile_id)
         assert tile is not None
         assert tile.action_taken is True
 
@@ -343,7 +344,7 @@ def test_generate_tile(client, user_with_character):
 
     # First mark the current tile as actioned
     with client.application.app_context():
-        tile = Tile.query.get(tile_id)
+        tile = db.session.get(Tile, tile_id)
         assert tile is not None
         tile.action_taken = True
         db.session.commit()
@@ -393,7 +394,7 @@ def test_game_over_when_hp_zero(client, user_with_character):
 
     # Test the is_alive property and take_damage method
     with client.application.app_context():
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         assert user is not None
 
         # User should be alive initially
@@ -418,7 +419,7 @@ def test_game_over_route(client, user_with_character):
 
     # Set player to dead
     with client.application.app_context():
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         assert user is not None
         user.hitpoints = 0
         db.session.commit()
@@ -451,7 +452,7 @@ def test_heal_respects_max_hp(client, user_with_character):
 
     # Set player HP to max
     with client.application.app_context():
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         assert user is not None
         user.hitpoints = user.max_hp
         db.session.commit()
@@ -467,7 +468,7 @@ def test_heal_respects_max_hp(client, user_with_character):
 
     # Verify HP didn't exceed max
     with client.application.app_context():
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         assert user is not None
         assert user.hitpoints == user.max_hp
         assert user.hitpoints <= 100
@@ -494,10 +495,13 @@ def test_inspect_action(client, user_with_character):
 
     # Verify tile was actioned and inspect was processed
     with client.application.app_context():
-        tile = Tile.query.get(tile_id)
+        tile = db.session.get(Tile, tile_id)
         assert tile is not None
         assert tile.action_taken is True
-        assert tile.action == action_id  # Action ID was saved
+        # tile.action stores the Action history id; verify the history references the ActionOption
+        action_history = db.session.get(Action, tile.action)
+        assert action_history is not None
+        assert action_history.actionverb == action_id
 
 
 def test_quit_action(client, user_with_character):
@@ -521,7 +525,10 @@ def test_quit_action(client, user_with_character):
 
     # Verify tile was actioned and quit was processed
     with client.application.app_context():
-        tile = Tile.query.get(tile_id)
+        tile = db.session.get(Tile, tile_id)
         assert tile is not None
         assert tile.action_taken is True
-        assert tile.action == action_id  # Action ID was saved
+        # tile.action stores the Action history id; verify the history references the ActionOption
+        action_history = db.session.get(Action, tile.action)
+        assert action_history is not None
+        assert action_history.actionverb == action_id
