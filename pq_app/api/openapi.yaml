@@ -425,13 +425,23 @@ paths:
       responses:
         '200':
           description: Character information
-          content:
-            application/json:
+          '200':
+            description: Character information (includes points)
               schema:
                 $ref: '#/components/schemas/PlayerCharacter'
         '403':
           description: Access denied
-          content:
+                  properties:
+                    id: { type: integer }
+                    user_id: { type: integer }
+                    char_name: { type: string }
+                    char_class: { type: string, nullable: true }
+                    char_race: { type: string, nullable: true }
+                    hit_points: { type: integer }
+                    max_hit_points: { type: integer }
+                    level: { type: integer }
+                    experience: { type: integer }
+                    points: { type: integer }
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
@@ -516,14 +526,22 @@ paths:
                         type: number
                         format: float
                       total_damage_dealt:
-                        type: integer
-                      total_damage_received:
+                      '200':
+                        description: Character statistics including encounter history and points
                         type: integer
                       average_damage_dealt:
                         type: number
                         format: float
 
-  /player/{player_id}/tiles/current:
+                                character:
+                                  type: object
+                                  properties:
+                                    id: { type: integer }
+                                    user_id: { type: integer }
+                                    char_name: { type: string }
+                                    hit_points: { type: integer }
+                                    max_hit_points: { type: integer }
+                                    points: { type: integer }
     get:
       tags:
         - Tiles
@@ -533,6 +551,10 @@ paths:
       parameters:
         - name: player_id
           in: path
+                                recent_encounters:
+                                  type: array
+                                  items:
+                                    $ref: '#/components/schemas/Encounter'
           required: true
           schema:
             type: integer

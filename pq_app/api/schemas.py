@@ -3,14 +3,16 @@ Response Schemas
 
 Marshmallow schemas for API response serialization.
 """
+
 from marshmallow import Schema, fields, EXCLUDE
 
 
 class UserSchema(Schema):
     """User serialization schema"""
+
     class Meta:
         unknown = EXCLUDE
-    
+
     id = fields.Int(dump_only=True)
     username = fields.Str(required=True)
     email = fields.Email()
@@ -19,9 +21,10 @@ class UserSchema(Schema):
 
 class PlayerCharacterSchema(Schema):
     """Player character serialization schema"""
+
     class Meta:
         unknown = EXCLUDE
-    
+
     id = fields.Int(dump_only=True)
     user_id = fields.Int(dump_only=True)
     char_name = fields.Str(required=True)
@@ -39,9 +42,10 @@ class PlayerCharacterSchema(Schema):
 
 class TileTypeOptionSchema(Schema):
     """Tile type option serialization schema"""
+
     class Meta:
         unknown = EXCLUDE
-    
+
     id = fields.Int(dump_only=True)
     name = fields.Str()
     ascii_art = fields.Str()
@@ -49,9 +53,10 @@ class TileTypeOptionSchema(Schema):
 
 class ActionOptionSchema(Schema):
     """Action option serialization schema"""
+
     class Meta:
         unknown = EXCLUDE
-    
+
     id = fields.Int(dump_only=True)
     code = fields.Str()
     name = fields.Str()
@@ -60,11 +65,12 @@ class ActionOptionSchema(Schema):
 
 class TileSchema(Schema):
     """Tile serialization schema"""
+
     class Meta:
         unknown = EXCLUDE
-    
+
     id = fields.Int(dump_only=True)
-    type = fields.Int()
+    id = fields.Int()
     content = fields.Str()
     playthrough_id = fields.Int()
     tile_type_obj = fields.Nested(TileTypeOptionSchema, dump_only=True)
@@ -74,9 +80,13 @@ class TileSchema(Schema):
 
 class CombatActionSchema(Schema):
     """Combat action serialization schema"""
+
     class Meta:
         unknown = EXCLUDE
-    
+
+    points = fields.Int()
+    last_points_accrual_at = fields.DateTime(allow_none=True)
+
     id = fields.Int(dump_only=True)
     code = fields.Str()
     name = fields.Str()
@@ -92,9 +102,10 @@ class CombatActionSchema(Schema):
 
 class EncounterSchema(Schema):
     """Encounter serialization schema"""
+
     class Meta:
         unknown = EXCLUDE
-    
+
     id = fields.Int(dump_only=True)
     player_id = fields.Int()
     tile_id = fields.Int()
@@ -109,9 +120,10 @@ class EncounterSchema(Schema):
 
 class ActionResultSchema(Schema):
     """Action result serialization schema"""
+
     class Meta:
         unknown = EXCLUDE
-    
+
     success = fields.Bool()
     message = fields.Str()
     player_hp = fields.Int()
@@ -123,9 +135,10 @@ class ActionResultSchema(Schema):
 
 class ErrorSchema(Schema):
     """Error response schema"""
+
     class Meta:
         unknown = EXCLUDE
-    
+
     error = fields.Str()
     message = fields.Str()
     status_code = fields.Int()
