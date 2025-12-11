@@ -95,11 +95,11 @@ class Tile(Model):
 class Action(Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
-    tile = db.Column(db.Integer, db.ForeignKey("tile.id", use_alter=True))
+    tile = db.Column(db.Integer, db.ForeignKey("tile.id", use_alter=True, ondelete="CASCADE"))
     actionverb = db.Column(db.Integer, db.ForeignKey("actionoption.id"))
 
     # Relationships - specify foreign_keys to avoid circular reference issues
-    tile_ref = db.relationship("Tile", foreign_keys=[tile])
+    tile_ref = db.relationship("Tile", foreign_keys=[tile], passive_deletes=True)
     action_option = db.relationship("ActionOption", backref="actions")
 
 
@@ -107,6 +107,7 @@ class ActionOption(Model):
     __tablename__ = "actionoption"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
+    code = db.Column(db.String, unique=True, nullable=True)
 
     def __init__(self, name=None):
         self.name = name
@@ -146,14 +147,15 @@ def init_defaults():
     """pre-populate action options table"""
     if ActionOption.query.first() is None:
         action_options = [
-            {"name": "rest"},
-            {"name": "inspect"},
-            {"name": "fight"},
-            {"name": "quit"},
+            {"name": "rest", "code": "rest"},
+            {"name": "inspect", "code": "inspect"},
+            {"name": "fight", "code": "fight"},
+            {"name": "quit", "code": "quit"},
         ]
         for act_opt in action_options:
             current_act_opt = ActionOption()
             current_act_opt.name = act_opt["name"]
+            current_act_opt.code = act_opt.get("code")
             db.session.add(current_act_opt)
         db.session.commit()
     if TileTypeOption.query.first() is None:

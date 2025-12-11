@@ -9,6 +9,7 @@ from flask_login import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import model, gameforms, pqMonsters, gameTile
+from sqlalchemy import select
 
 # Create Blueprint
 main_bp = Blueprint("main", __name__)
@@ -249,43 +250,57 @@ def execute_tile_action(playerid, tile_id):
     if current_user.id != playerid:
         abort(403)
 
-    tile_record = model.db.session.get(model.Tile, tile_id)
     # Get action from request form data
     action_type_ID = request.form.get("action", type=int)
-    if request.method == "POST":
-        # validate actionID is in the list of valid actions table
-        if not action_type_ID:
-            abort(400, description="No action selected")
-        action_record = model.Action.query.filter_by(tile=tile_id, actionverb=action_type_ID).first()
-        if action_record:
-            print(f"Action_record ID: {action_record.id}")
+    if request.method != "POST":
+        return {"status_code": 402}
+
+    if not action_type_ID:
+        abort(400, description="No action selected")
+
+    # Use a transactional nested block and acquire a row-level lock on the tile to prevent races
+    with model.db.session.begin_nested():
+        stmt = select(model.Tile).where(model.Tile.id == tile_id).with_for_update()
+        tile_record = model.db.session.execute(stmt).scalar_one_or_none()
+
         # Ensure the tile exists and hasn't already been actioned
         if not tile_record:
             abort(400, description="Tile not found")
         if tile_record.action_taken:
             abort(400, description="tile has already been actioned")
-        # handle rest
+
+        # validate whether an action record for this tile & verb already exists
+        action_record = model.Action.query.filter_by(tile=tile_id, actionverb=action_type_ID).first()
+
+        # handle player and apply action semantics
         player_record = model.db.session.get(model.User, playerid)
         if not player_record:
-            return {"Error": "Player not found"}
-        print(f"Player_id: {player_record.id}")
+            abort(400, description="Player not found")
 
-        # Get action names from database instead of hardcoding IDs
+        # Prefer lookup by ActionOption.code if provided, otherwise fall back to id/name
         action_option = model.db.session.get(model.ActionOption, action_type_ID)
-        action_name = action_option.name if action_option else "unknown"
+        action_name = None
+        if action_option:
+            action_name = action_option.name
+        else:
+            # fallback: try lookup by code string if form provided a code
+            action_code = request.form.get("action_code")
+            if action_code:
+                action_option = model.ActionOption.query.filter_by(code=action_code).one_or_none()
+                if action_option:
+                    action_name = action_option.name
+        action_name = action_name or "unknown"
 
         if action_name == "rest":
             player_record.heal(10)
             flash("You rest and recover 10 HP.")
 
         elif action_name == "fight":
-            # Simple combat: player takes random damage
             damage = random.randint(5, 20)
             player_record.take_damage(damage)
             flash(f"You fought bravely and took {damage} damage!")
 
         elif action_name == "inspect":
-            # Get tile type for contextual message
             tile_type = model.db.session.get(model.TileTypeOption, tile_record.type)
             if tile_type and tile_type.name == "monster":
                 flash("You carefully observe the creature, learning its patterns.")
@@ -304,7 +319,6 @@ def execute_tile_action(playerid, tile_id):
             new_action.tile = tile_id
             new_action.actionverb = action_type_ID
             model.db.session.add(new_action)
-            # flush to get new_action.id
             model.db.session.flush()
             action_history_id = new_action.id
         else:
@@ -316,20 +330,15 @@ def execute_tile_action(playerid, tile_id):
         tile_record.action_taken = True
         model.db.session.add(tile_record)
         model.db.session.add(player_record)
-        model.db.session.commit()
 
-        # Check if player is still alive after action
-        if not player_record.is_alive:
-            flash("You have fallen in battle...")
-            return redirect(url_for("main.game_over", player_id=playerid))
+    # transaction committed here
 
-        # return the generate tile function to display the next tile
-        return redirect(url_for("main.generate_tile", player_id=playerid))
-        # return {"status_code": 200, "data": "success"}
-    else:
-        return {
-            "status_code": 402,
-        }
+    # Check if player is still alive after action
+    if not player_record.is_alive:
+        flash("You have fallen in battle...")
+        return redirect(url_for("main.game_over", player_id=playerid))
+
+    return redirect(url_for("main.generate_tile", player_id=playerid))
 
 
 @main_bp.route("/player/<int:player_id>/profile", methods=["GET"])
@@ -410,10 +419,14 @@ def restart_game(player_id):
     user_profile.playerclass = None
     user_profile.playerrace = None
 
-    # Delete all old tiles
-    model.Tile.query.filter_by(user_id=player_id).delete()
+    # Delete all old tiles using ORM deletes so cascades and relationships are honored
+    with model.db.session.begin_nested():
+        tiles = model.Tile.query.filter_by(user_id=player_id).all()
+        for t in tiles:
+            model.db.session.delete(t)
+        model.db.session.add(user_profile)
 
-    model.db.session.commit()
+    # transaction committed by context manager
 
     flash("Your adventure begins anew!")
     return redirect(url_for("main.setup_char", player_id=player_id))
