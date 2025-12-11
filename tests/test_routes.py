@@ -12,6 +12,7 @@ from pq_app.model import (
     PlayerRace,
     Tile,
     Action,
+    Playthrough,
     TileTypeOption,
     ActionOption,
 )
@@ -239,8 +240,12 @@ def user_with_character(client, authenticated_user, setup_game_data):
         user.playerrace = player_race.id
         user.hitpoints = 100
 
-        # Create a tile for the user
-        tile = Tile(user_id=user.id, type=tile_type.id, action_taken=False)
+        # Create a playthrough and a tile for the user
+        play = Playthrough(user_id=user.id)
+        db.session.add(play)
+        db.session.flush()
+
+        tile = Tile(user_id=user.id, type=tile_type.id, action_taken=False, playthrough_id=play.id)
         db.session.add(tile)
         db.session.commit()
 

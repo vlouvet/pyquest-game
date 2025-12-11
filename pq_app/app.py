@@ -1,6 +1,7 @@
 import random
 from typing import cast
-from flask import Blueprint, request, render_template, redirect, url_for, flash, abort
+from datetime import datetime, timezone
+from flask import Blueprint, request, render_template, redirect, url_for, flash, abort, jsonify
 from flask_login import (
     login_user,
     logout_user,
@@ -66,13 +67,14 @@ def greet_user():
     """Home route - redirects user based on their setup status."""
     # Check if user has completed character setup
     if current_user.playerclass and current_user.playerrace:
-        # User is set up, check if they have tiles
-        existing_tile = model.Tile.query.filter_by(user_id=current_user.id).first()
-        if existing_tile:
+        # User is set up, check if they have an active playthrough
+        active_play = model.Playthrough.query.filter_by(user_id=current_user.id, ended_at=None).first()
+        if active_play:
             return redirect(url_for("main.get_tile", player_id=current_user.id))
-        else:
-            # Has character but no tiles, create first tile
-            return redirect(url_for("main.setup_char", player_id=current_user.id))
+        # If no active playthrough, present dashboard allowing user to start a new journey
+        user_tiles_exist = model.Tile.query.filter_by(user_id=current_user.id).first() is not None
+        start_form = gameforms.RestartForm()
+        return render_template("dashboard.html", player_char=current_user, has_tiles=user_tiles_exist, start_form=start_form)
     else:
         # User needs character setup
         return redirect(url_for("main.setup_char", player_id=current_user.id))
@@ -109,9 +111,15 @@ def setup_char(player_id):
 
         # if no tile exists for this user, create a tile
         if not model.Tile.query.filter_by(user_id=user_profile_id).first():
+            # create a new playthrough for this user and the initial tile
+            new_play = model.Playthrough(user_id=user_profile_id)
+            model.db.session.add(new_play)
+            model.db.session.flush()
+
             current_tile = model.Tile()
             current_tile.user_id = user_profile_id
             current_tile.type = tile_type["id"]
+            current_tile.playthrough_id = new_play.id
             model.db.session.add(current_tile)
         form = gameforms.TileForm()
         form.type.data = tile_type["name"]
@@ -168,7 +176,8 @@ def get_tile(player_id):
         flash("No tile found for this player; please set up your character or generate a tile.")
         return redirect(url_for("main.setup_char", player_id=player_id))
     form = gameforms.TileForm(obj=tile_details)
-    form.tileid = tile_details.id
+    # populate the hidden/read-only tile id into the field data so templates can read it
+    form.tileid.data = str(tile_details.id)
     # set the form type data to the name value from the TileTypeOption table using tile_details.type as a foreign key
     tile_type_obj = model.db.session.get(model.TileTypeOption, tile_details.type)
     form.type.data = tile_type_obj.name if tile_type_obj else None
@@ -232,13 +241,16 @@ def generate_tile(player_id):
     current_tile = model.Tile()
     current_tile.type = random.choice(tile_type_list)["id"]
     current_tile.user_id = player_id
+    # preserve playthrough from previous tile when generating the next tile
+    current_tile.playthrough_id = tile_record.playthrough_id
 
     model.db.session.add(current_tile)
     model.db.session.commit()
 
     # Prepare the form for the newly-created tile
     tile_details = gameforms.TileForm(obj=current_tile)
-    tile_details.tileid = current_tile.id
+    # populate the hidden/read-only tile id into the field data so templates can read it
+    tile_details.tileid.data = str(current_tile.id)
     tile_type_obj = model.db.session.get(model.TileTypeOption, current_tile.type)
     tile_details.type.data = tile_type_obj.name if tile_type_obj else None
     tile_details.action.choices = [
@@ -247,6 +259,37 @@ def generate_tile(player_id):
     ]
 
     return render_template("gameTile.html", player_char=user_profile, form=tile_details)
+
+
+
+@main_bp.route("/player/<int:player_id>/start_journey", methods=["POST"])
+@login_required
+def start_journey(player_id):
+    # Authorization check
+    if current_user.id != player_id:
+        abort(403)
+
+    user_profile = model.db.session.get(model.User, player_id)
+    if not user_profile:
+        abort(404)
+
+    # Create a new playthrough and initial tile for this player
+    new_play = model.Playthrough(user_id=player_id)
+    model.db.session.add(new_play)
+    model.db.session.flush()
+
+    # create first tile
+    tile_type_list = [
+        {"name": tile_type.name, "id": tile_type.id} for tile_type in model.TileTypeOption.query.order_by(model.TileTypeOption.name)
+    ]
+    current_tile = model.Tile()
+    current_tile.type = random.choice(tile_type_list)["id"]
+    current_tile.user_id = player_id
+    current_tile.playthrough_id = new_play.id
+    model.db.session.add(current_tile)
+    model.db.session.commit()
+
+    return redirect(url_for("main.get_tile", player_id=player_id))
 
 
 @main_bp.route("/player/<int:playerid>/game/tile/<int:tile_id>/action", methods=["POST"])
@@ -259,8 +302,13 @@ def execute_tile_action(playerid, tile_id):
     if request.method != "POST":
         return {"status_code": 402}
 
+    # detect AJAX/JSON requests
+    is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest" or request.accept_mimetypes.accept_json
+
     action_post_value = request.form.get("action")
     if not action_post_value:
+        if is_ajax:
+            return jsonify(error="No action selected"), 400
         abort(400, description="No action selected")
 
     # Resolve ActionOption: prefer lookup by code; if not found and value is numeric, lookup by id.
@@ -288,8 +336,12 @@ def execute_tile_action(playerid, tile_id):
 
         # Ensure the tile exists and hasn't already been actioned
         if not tile_record:
+            if is_ajax:
+                return jsonify(error="Tile not found"), 400
             abort(400, description="Tile not found")
         if tile_record.action_taken:
+            if is_ajax:
+                return jsonify(error="tile has already been actioned"), 400
             abort(400, description="tile has already been actioned")
 
         # Resolve action history existence
@@ -301,6 +353,8 @@ def execute_tile_action(playerid, tile_id):
         # handle player and apply action semantics
         player_record = model.db.session.get(model.User, playerid)
         if not player_record:
+            if is_ajax:
+                return jsonify(error="Player not found"), 400
             abort(400, description="Player not found")
 
         # Apply action semantics and capture a short result message
@@ -329,6 +383,16 @@ def execute_tile_action(playerid, tile_id):
         elif action_name == "quit":
             action_result = "You decide to retreat from this challenge."
             flash(action_result)
+            # mark the playthrough as ended
+            try:
+                if tile_record and tile_record.playthrough_id:
+                    pt = model.db.session.get(model.Playthrough, tile_record.playthrough_id)
+                    if pt:
+                        pt.ended_at = datetime.now(timezone.utc)
+                        model.db.session.add(pt)
+            except Exception:
+                # don't let playthrough ending failures block the response
+                model.db.session.rollback()
 
         else:
             action_result = f"Performed action: {action_name}"
@@ -357,13 +421,21 @@ def execute_tile_action(playerid, tile_id):
 
     # Check if player is still alive after action
     if not player_record.is_alive:
+        if is_ajax:
+            return jsonify(error="You have fallen in battle..."), 200
         flash("You have fallen in battle...")
         return redirect(url_for("main.game_over", player_id=playerid))
+
+    # If the player chose to quit, end the journey and return to the main/dashboard
+    if action_name == "quit":
+        if is_ajax:
+            return jsonify(ok=True, redirect=url_for("main.greet_user"))
+        return redirect(url_for("main.greet_user"))
 
     # Render readonly tile view including the action result so the user sees the outcome
     tile_details = model.db.session.get(model.Tile, tile_id)
     form = gameforms.TileForm(obj=tile_details)
-    form.tileid = tile_details.id
+    form.tileid.data = str(tile_details.id)
     tile_type_obj = model.db.session.get(model.TileTypeOption, tile_details.type)
     form.type.data = tile_type_obj.name if tile_type_obj else None
     form.action.choices = [
@@ -372,6 +444,11 @@ def execute_tile_action(playerid, tile_id):
         .filter(model.Action.tile == tile_details.id)
         .order_by(model.ActionOption.name)
     ]
+
+    # If the client expects JSON (AJAX), return the action result and an HTML fragment for the updated tile
+    if is_ajax:
+        tile_html = render_template("_tile_fragment.html", player_char=player_record, form=form, readonly=True, action_result=action_result)
+        return jsonify(ok=True, action_result=action_result, tile_html=tile_html)
 
     return render_template("gameTile.html", player_char=player_record, form=form, readonly=True, action_result=action_result)
 

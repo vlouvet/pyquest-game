@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  flask-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # Use a local sqlite DB file inside the container (persisted to host via volume)
+      DATABASE_URL: sqlite:////data/pyquest.db
+      FLASK_ENV: development
+      SECRET_KEY: dev-secret
+      USE_SQLITE: '1'
+    volumes:
+      - ./instance:/data
+    ports:
+      - "5000:5000"
+    stdin_open: true
+    tty: true
+
+# For sqlite mode we don't need external DB services

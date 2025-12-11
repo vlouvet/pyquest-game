@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+  <h2>Welcome back, {{ player_char.username }}!</h2>
+  <p>Manage your adventures from here.</p>
+
+  {% if has_tiles %}
+    <p>You have previous playthroughs.</p>
+  {% else %}
+    <p>You have not started a journey yet.</p>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('main.start_journey', player_id=player_char.id) }}">
+    {{ start_form.hidden_tag() }}
+    <button type="submit">Start Journey</button>
+  </form>
+
+  <p>
+    <a href="{{ url_for('main.get_history', player_id=player_char.id) }}">View History</a>
+  </p>
+{% endblock %}
