@@ -9,7 +9,7 @@ from flask_login import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import model, gameforms, pqMonsters, gameTile
-from .services import CombatService, TileService
+from .services import CombatService, TileService, MediaService
 
 # Create Blueprint
 main_bp = Blueprint("main", __name__)
@@ -181,8 +181,9 @@ def get_tile(player_id):
     if not user_profile.is_alive:
         return redirect(url_for("main.game_over", player_id=player_id))
 
-    # Initialize tile service
+    # Initialize services
     tile_service = TileService()
+    media_service = MediaService()
     
     # Find the active playthrough
     active_playthrough = tile_service.get_active_playthrough(player_id)
@@ -198,6 +199,9 @@ def get_tile(player_id):
     
     # Get tile data including type and allowed actions
     tile_data = tile_service.get_tile_data(tile_details.id)
+    
+    # Get media for the tile
+    ascii_art = media_service.get_tile_display_media(tile_details.id)
     
     # Prepare form
     form = gameforms.TileForm(obj=tile_details)
@@ -217,7 +221,7 @@ def get_tile(player_id):
             .order_by(model.ActionOption.name)
         ]
         return render_template("gameTile.html", player_char=user_profile, form=form, 
-                             tile_type_obj=tile_data.tile_type_obj, readonly=True)
+                             tile_type_obj=tile_data.tile_type_obj, ascii_art=ascii_art, readonly=True)
 
     # Active tile - show available actions
     form.action.choices = [
@@ -225,7 +229,7 @@ def get_tile(player_id):
         for action in tile_data.allowed_actions
     ]
     return render_template("gameTile.html", player_char=user_profile, form=form, 
-                         tile_type_obj=tile_data.tile_type_obj)
+                         tile_type_obj=tile_data.tile_type_obj, ascii_art=ascii_art)
 
 
 @main_bp.route("/player/<int:player_id>/game/tile/next", methods=["POST", "GET"])
@@ -470,6 +474,10 @@ def execute_tile_action(playerid, tile_id):
         .filter(model.Action.tile == tile_details.id)
         .order_by(model.ActionOption.name)
     ]
+    
+    # Get media for the tile
+    media_service = MediaService()
+    ascii_art = media_service.get_tile_display_media(tile_id)
 
     # If the client expects JSON (AJAX), return the action result and an HTML fragment
     if is_ajax:
@@ -478,6 +486,7 @@ def execute_tile_action(playerid, tile_id):
             player_char=player_record,
             form=form,
             tile_type_obj=tile_type_obj,
+            ascii_art=ascii_art,
             readonly=True,
             action_result=combat_result.message
         )
@@ -488,6 +497,7 @@ def execute_tile_action(playerid, tile_id):
         player_char=player_record,
         form=form,
         tile_type_obj=tile_type_obj,
+        ascii_art=ascii_art,
         readonly=True,
         action_result=combat_result.message
     )
@@ -589,3 +599,153 @@ def restart_game(player_id):
 
     flash("Your adventure begins anew!")
     return redirect(url_for("main.setup_char", player_id=player_id))
+
+
+# ============================================================================
+# Media Management Endpoints
+# ============================================================================
+
+@main_bp.route("/admin/media/upload", methods=["POST"])
+@login_required
+def upload_media():
+    """
+    Upload or create new media for a tile type.
+    Supports both ASCII art (text) and image URLs.
+    """
+    tile_type_id = request.form.get("tile_type_id")
+    media_type = request.form.get("media_type", "ascii_art")
+    content = request.form.get("content")
+    url = request.form.get("url")
+    is_default = request.form.get("is_default", "false").lower() == "true"
+    
+    if not tile_type_id:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(error="tile_type_id is required"), 400
+        flash("Tile type is required")
+        return redirect(request.referrer or url_for("main.greet_user"))
+    
+    try:
+        tile_type_id = int(tile_type_id)
+    except ValueError:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(error="Invalid tile_type_id"), 400
+        flash("Invalid tile type")
+        return redirect(request.referrer or url_for("main.greet_user"))
+    
+    # Verify tile type exists
+    tile_type = model.db.session.get(model.TileTypeOption, tile_type_id)
+    if not tile_type:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(error="Tile type not found"), 404
+        flash("Tile type not found")
+        return redirect(request.referrer or url_for("main.greet_user"))
+    
+    media_service = MediaService()
+    
+    try:
+        media = media_service.create_media_record(
+            tile_type_id=tile_type_id,
+            media_type=media_type,
+            content=content,
+            url=url,
+            is_default=is_default
+        )
+        
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(
+                success=True,
+                media_id=media.id,
+                message=f"Media created for {tile_type.name}"
+            ), 201
+        
+        flash(f"Media created for {tile_type.name}")
+        return redirect(request.referrer or url_for("main.greet_user"))
+        
+    except Exception as e:
+        model.db.session.rollback()
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(error=str(e)), 500
+        flash(f"Error creating media: {str(e)}")
+        return redirect(request.referrer or url_for("main.greet_user"))
+
+
+@main_bp.route("/admin/media/<string:tile_type_name>", methods=["GET"])
+@login_required
+def list_media(tile_type_name):
+    """
+    List all media for a specific tile type.
+    """
+    tile_type = model.TileTypeOption.query.filter_by(name=tile_type_name).first()
+    if not tile_type:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(error="Tile type not found"), 404
+        abort(404, description="Tile type not found")
+    
+    media_service = MediaService()
+    media_list = media_service.get_media_for_tile_type(tile_type.id)
+    
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return jsonify(
+            tile_type=tile_type_name,
+            media=[
+                {
+                    "id": m.id,
+                    "media_type": m.media_type,
+                    "content": m.content[:100] + "..." if m.content and len(m.content) > 100 else m.content,
+                    "url": m.url,
+                    "is_default": m.is_default,
+                    "display_order": m.display_order
+                }
+                for m in media_list
+            ]
+        )
+    
+    return render_template(
+        "admin_media.html",
+        tile_type=tile_type,
+        media_list=media_list
+    )
+
+
+@main_bp.route("/admin/media/<int:media_id>", methods=["DELETE"])
+@login_required
+def delete_media(media_id):
+    """
+    Delete a media record.
+    """
+    media_service = MediaService()
+    
+    success = media_service.delete_media(media_id)
+    
+    if success:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(success=True, message="Media deleted"), 200
+        flash("Media deleted successfully")
+    else:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(error="Media not found"), 404
+        flash("Media not found")
+    
+    return redirect(request.referrer or url_for("main.greet_user"))
+
+
+@main_bp.route("/admin/media/<int:media_id>/set-default", methods=["POST"])
+@login_required
+def set_default_media(media_id):
+    """
+    Set a media record as the default for its tile type.
+    """
+    media_service = MediaService()
+    
+    success = media_service.set_default_media(media_id)
+    
+    if success:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(success=True, message="Default media updated"), 200
+        flash("Default media updated successfully")
+    else:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(error="Media not found or invalid"), 400
+        flash("Failed to update default media")
+    
+    return redirect(request.referrer or url_for("main.greet_user"))
