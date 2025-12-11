@@ -110,7 +110,6 @@ def setup_char(player_id):
         # Manually set playerclass and playerrace from form data
         user_profile.playerclass = form.charclass.data
         user_profile.playerrace = form.charrace.data
-
         # if no tile exists for this user, create a tile
         if not model.Tile.query.filter_by(user_id=user_profile_id).first():
             # create a new playthrough for this user and the initial tile
