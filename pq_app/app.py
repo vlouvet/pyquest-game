@@ -10,6 +10,7 @@ from flask_login import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import model, gameforms, pqMonsters, gameTile
+from .services import CombatService
 from sqlalchemy import select
 
 # Create Blueprint
@@ -376,14 +377,16 @@ def start_journey(player_id):
 @main_bp.route("/player/<int:playerid>/game/tile/<int:tile_id>/action", methods=["POST"])
 @login_required
 def execute_tile_action(playerid, tile_id):
+    """Execute an action on a tile using CombatService"""
     # Authorization check
     if current_user.id != playerid:
         abort(403)
+    
     # Accept either ActionOption.code (string) or numeric id in the posted `action` field.
     if request.method != "POST":
         return {"status_code": 402}
 
-    # detect AJAX/JSON requests - only check X-Requested-With header for stricter detection
+    # Detect AJAX/JSON requests - only check X-Requested-With header for stricter detection
     is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
     action_post_value = request.form.get("action")
@@ -392,55 +395,39 @@ def execute_tile_action(playerid, tile_id):
             return jsonify(error="No action selected"), 400
         abort(400, description="No action selected")
 
-    # Resolve ActionOption: prefer lookup by code; if not found and value is numeric, lookup by id.
-    action_option = None
-    action_name = None
-    # Try lookup by code first
-    if action_post_value:
-        action_option = model.ActionOption.query.filter_by(code=action_post_value).one_or_none()
-    # Fallback to numeric id
-    if not action_option and action_post_value and action_post_value.isdigit():
-        action_option = model.db.session.get(model.ActionOption, int(action_post_value))
-    # Last resort: lookup by name
-    if not action_option:
-        action_option = model.ActionOption.query.filter_by(name=action_post_value).one_or_none()
-
-    if action_option:
-        action_name = action_option.name
-    else:
-        action_name = "unknown"
+    # Initialize combat service
+    combat_service = CombatService()
+    
+    # Resolve ActionOption
+    action_option = combat_service.get_action_by_value(action_post_value)
+    action_name = action_option.name if action_option else "unknown"
 
     # Use a transactional nested block and acquire a row-level lock on the tile to prevent races
     with model.db.session.begin_nested():
-        stmt = select(model.Tile).where(model.Tile.id == tile_id).with_for_update()
-        tile_record = model.db.session.execute(stmt).scalar_one_or_none()
+        tile_record = combat_service.get_tile_with_lock(tile_id)
 
-        # Ensure the tile exists and hasn't already been actioned
-        if not tile_record:
-            if is_ajax:
-                return jsonify(error="Tile not found"), 400
-            abort(400, description="Tile not found")
-        if tile_record.action_taken:
-            # Redirect to get_tile to show the tile in readonly mode instead of erroring
-            if is_ajax:
-                return jsonify(redirect=url_for("main.get_tile", player_id=playerid)), 200
-            return redirect(url_for("main.get_tile", player_id=playerid))
+        # Validate tile
+        is_valid, error_msg = combat_service.validate_tile_action(tile_record)
+        if not is_valid:
+            if error_msg == "Tile already actioned":
+                # Redirect to get_tile to show the tile in readonly mode
+                if is_ajax:
+                    return jsonify(redirect=url_for("main.get_tile", player_id=playerid)), 200
+                return redirect(url_for("main.get_tile", player_id=playerid))
+            else:
+                # Tile not found or other error
+                if is_ajax:
+                    return jsonify(error=error_msg), 400
+                abort(400, description=error_msg)
 
-        # Resolve action history existence
-        actionverb_id = action_option.id if action_option else None
-        action_record = None
-        if actionverb_id is not None:
-            action_record = model.Action.query.filter_by(tile=tile_id, actionverb=actionverb_id).first()
-
-        # handle player and apply action semantics
+        # Get player
         player_record = model.db.session.get(model.User, playerid)
         if not player_record:
             if is_ajax:
                 return jsonify(error="Player not found"), 400
             abort(400, description="Player not found")
 
-        # Apply action semantics and capture a short result message
-        action_result = None
+        # Get tile type
         tile_type = model.db.session.get(model.TileTypeOption, tile_record.type)
         tile_type_name = tile_type.name if tile_type else None
         if action_name == "rest":
@@ -456,81 +443,36 @@ def execute_tile_action(playerid, tile_id):
                 action_result = "You rest and recover 10 HP."
                 flash(action_result)
 
-        elif action_name == "fight":
-            damage = random.randint(5, 20)
-            player_record.take_damage(damage)
-            action_result = f"You fought bravely and took {damage} damage!"
-            flash(action_result)
+        # Get or create action record for history tracking
+        action_history_id = combat_service.get_or_create_action_record(
+            tile_id=tile_id,
+            action_name=action_name,
+            action_option=action_option
+        )
 
-        elif action_name == "inspect":
-            if tile_type_name == "monster":
-                action_result = "You carefully observe the creature, learning its patterns."
-            elif tile_type_name == "treasure":
-                # 1% chance to restore all HP
-                if random.randint(1, 100) == 1:
-                    max_hp = 100  # Assuming max HP is 100
-                    healed = max_hp - player_record.hitpoints
-                    player_record.hitpoints = max_hp
-                    action_result = f"You found a magical healing artifact! Restored {healed} HP to full health!"
-                else:
-                    action_result = "You inspect the area and find hints of treasure nearby."
-            else:
-                action_result = "You take a moment to examine your surroundings carefully."
-            flash(action_result)
+        # Complete the tile action
+        combat_service.complete_tile_action(
+            tile=tile_record,
+            player=player_record,
+            action_history_id=action_history_id
+        )
 
-        elif action_name == "quit":
-            action_result = "You decide to retreat from this challenge."
-            flash(action_result)
-            # mark the playthrough as ended
-            try:
-                if tile_record and tile_record.playthrough_id:
-                    pt = model.db.session.get(model.Playthrough, tile_record.playthrough_id)
-                    if pt:
-                        pt.ended_at = datetime.now(timezone.utc)
-                        model.db.session.add(pt)
-            except Exception:
-                # don't let playthrough ending failures block the response
-                model.db.session.rollback()
-
-        else:
-            action_result = f"Performed action: {action_name}"
-            flash(action_result)
-
-        # Create Action record for history tracking (or reuse existing)
-        if not action_record:
-            new_action = model.Action()
-            new_action.name = action_name
-            new_action.tile = tile_id
-            new_action.actionverb = actionverb_id
-            model.db.session.add(new_action)
-            model.db.session.flush()
-            action_history_id = new_action.id
-        else:
-            action_history_id = action_record.id
-
-        # Link tile to action history and mark action taken
-        tile_record.user_id = player_record.id
-        tile_record.action = action_history_id
-        tile_record.action_taken = True
-        model.db.session.add(tile_record)
-        model.db.session.add(player_record)
-
-    # transaction committed here
+    # Transaction committed here
 
     # Check if player is still alive after action
-    if not player_record.is_alive:
+    if not combat_result.player_alive:
         if is_ajax:
             return jsonify(error="You have fallen in battle..."), 200
         flash("You have fallen in battle...")
         return redirect(url_for("main.game_over", player_id=playerid))
 
     # If the player chose to quit, end the journey and return to the main/dashboard
-    if action_name == "quit":
+    if combat_result.should_end_playthrough:
         if is_ajax:
             return jsonify(ok=True, redirect=url_for("main.greet_user"))
         return redirect(url_for("main.greet_user"))
 
-    # Render readonly tile view including the action result so the user sees the outcome
+    # Render readonly tile view including the action result
     tile_details = model.db.session.get(model.Tile, tile_id)
     form = gameforms.TileForm(obj=tile_details)
     form.tileid.data = str(tile_details.id)
@@ -543,15 +485,23 @@ def execute_tile_action(playerid, tile_id):
         .order_by(model.ActionOption.name)
     ]
 
-    # If the client expects JSON (AJAX), return the action result and an HTML fragment for the updated tile
+    # If the client expects JSON (AJAX), return the action result and an HTML fragment
     if is_ajax:
         tile_html = render_template(
-            "_tile_fragment.html", player_char=player_record, form=form, readonly=True, action_result=action_result
+            "_tile_fragment.html", 
+            player_char=player_record, 
+            form=form, 
+            readonly=True, 
+            action_result=combat_result.message
         )
-        return jsonify(ok=True, action_result=action_result, tile_html=tile_html)
+        return jsonify(ok=True, action_result=combat_result.message, tile_html=tile_html)
 
     return render_template(
-        "gameTile.html", player_char=player_record, form=form, readonly=True, action_result=action_result
+        "gameTile.html", 
+        player_char=player_record, 
+        form=form, 
+        readonly=True, 
+        action_result=combat_result.message
     )
 
 
