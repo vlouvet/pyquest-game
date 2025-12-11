@@ -33,9 +33,12 @@ def create_app(config_name=None):
     login_manager.login_view = "main.login"
 
     # Create database tables
+    # In development and testing we create tables and seed defaults automatically.
+    # In production environments, prefer running Alembic migrations instead.
     with app.app_context():
-        model.db.create_all()
-        model.init_defaults()
+        if config_name in ("development", "testing"):
+            model.db.create_all()
+            model.init_defaults()
 
     # Register blueprints
     from .app import main_bp
