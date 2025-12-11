@@ -6,7 +6,7 @@
 <p>Username: {{ player_char.username }}</p>
 <p>Email: {{ player_char.email }}</p>
 <p>Hitpoints: {{ player_char.hitpoints }}</p>
-<p>Character Class: {{ player_char.playerclass }}</p>
-<p>Character Race: {{ player_char.playerrace }}</p>
+<p>Character Class: {{ player_char.player_class_rel.name if player_char.player_class_rel else 'N/A' }}</p>
+<p>Character Race: {{ player_char.player_race_rel.name if player_char.player_race_rel else 'N/A' }}</p>
 <a href="{{ url_for('main.get_history', player_id=player_char.id) }}">View Game History</a>
 {% endblock %}

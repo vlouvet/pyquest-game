@@ -170,9 +170,23 @@ def get_tile(player_id):
         return redirect(url_for("main.game_over", player_id=player_id))
 
     tile_config = gameTile.pqGameTile()
-    tile_details = model.Tile.query.filter_by(user_id=player_id).order_by(model.Tile.id.desc()).first()
+    # Find the active playthrough (where ended_at is NULL)
+    active_playthrough = model.Playthrough.query.filter_by(
+        user_id=player_id, ended_at=None
+    ).order_by(model.Playthrough.started_at.desc()).first()
+    
+    if not active_playthrough:
+        # No active journey; redirect to dashboard to start a new one
+        flash("No active journey found. Please start a new journey.")
+        return redirect(url_for("main.greet_user"))
+    
+    # Get the most recent tile from the active playthrough
+    tile_details = model.Tile.query.filter_by(
+        user_id=player_id, playthrough_id=active_playthrough.id
+    ).order_by(model.Tile.id.desc()).first()
+    
     if not tile_details:
-        # No tile found for this player; redirect to setup so a tile can be created
+        # No tile found for this player in active playthrough; redirect to setup
         flash("No tile found for this player; please set up your character or generate a tile.")
         return redirect(url_for("main.setup_char", player_id=player_id))
     form = gameforms.TileForm(obj=tile_details)
@@ -302,8 +316,8 @@ def execute_tile_action(playerid, tile_id):
     if request.method != "POST":
         return {"status_code": 402}
 
-    # detect AJAX/JSON requests
-    is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest" or request.accept_mimetypes.accept_json
+    # detect AJAX/JSON requests - only check X-Requested-With header for stricter detection
+    is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
     action_post_value = request.form.get("action")
     if not action_post_value:
@@ -340,9 +354,10 @@ def execute_tile_action(playerid, tile_id):
                 return jsonify(error="Tile not found"), 400
             abort(400, description="Tile not found")
         if tile_record.action_taken:
+            # Redirect to get_tile to show the tile in readonly mode instead of erroring
             if is_ajax:
-                return jsonify(error="tile has already been actioned"), 400
-            abort(400, description="tile has already been actioned")
+                return jsonify(redirect=url_for("main.get_tile", player_id=playerid)), 200
+            return redirect(url_for("main.get_tile", player_id=playerid))
 
         # Resolve action history existence
         actionverb_id = action_option.id if action_option else None
@@ -475,7 +490,11 @@ def get_history(player_id):
     # get current logged in user profile
     user_profile = model.db.session.get(model.User, player_id)
     tile_history = model.Tile.query.filter_by(user_id=player_id).all()
-    return render_template("gameHistory.html", player_char=user_profile, history=tile_history)
+    # Check if there's an active playthrough for button logic
+    active_playthrough = model.Playthrough.query.filter_by(
+        user_id=player_id, ended_at=None
+    ).first()
+    return render_template("gameHistory.html", player_char=user_profile, history=tile_history, active_playthrough=active_playthrough)
 
 
 @main_bp.route("/player/<int:player_id>/gameover", methods=["GET"])
