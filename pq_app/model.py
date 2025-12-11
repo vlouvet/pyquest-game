@@ -48,6 +48,16 @@ class User(Model, UserMixin):
         self.playerclass = playerclass
         self.playerrace = playerrace
 
+    def __init__(
+        self, username=None, password_hash=None, email=None, hitpoints=None, playerclass=None, playerrace=None
+    ):
+        self.username = username
+        self.password_hash = password_hash
+        self.email = email
+        self.hitpoints = hitpoints
+        self.playerclass = playerclass
+        self.playerrace = playerrace
+
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 

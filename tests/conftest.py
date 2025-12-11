@@ -3,6 +3,7 @@ from pq_app import create_app
 from pq_app.model import db
 
 
+
 @pytest.fixture
 def app():
     """Create and configure a test app instance."""
