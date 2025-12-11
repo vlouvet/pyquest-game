@@ -1,6 +1,5 @@
 import random
 from typing import cast
-from datetime import datetime, timezone
 from flask import Blueprint, request, render_template, redirect, url_for, flash, abort, jsonify
 from flask_login import (
     login_user,
@@ -11,7 +10,6 @@ from flask_login import (
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import model, gameforms, pqMonsters, gameTile
 from .services import CombatService, TileService
-from sqlalchemy import select
 
 # Create Blueprint
 main_bp = Blueprint("main", __name__)
@@ -218,21 +216,16 @@ def get_tile(player_id):
             .filter(model.Action.tile == tile_details.id)
             .order_by(model.ActionOption.name)
         ]
-        return render_template("gameTile.html", player_char=user_profile, form=form, readonly=True)
-    # Filter available actions based on tile type
-    all_actions = model.ActionOption.query.order_by(model.ActionOption.name).all()
-    if form.type.data == "sign":
-        # Sign tiles only allow rest, inspect, and quit
-        allowed_actions = [a for a in all_actions if a.name in ["rest", "inspect", "quit"]]
-    elif form.type.data == "treasure":
-        # Treasure tiles disable fight
-        allowed_actions = [a for a in all_actions if a.name != "fight"]
-    else:
-        # Other tile types (monster, scene) allow all actions
-        allowed_actions = all_actions
+        return render_template("gameTile.html", player_char=user_profile, form=form, 
+                             tile_type_obj=tile_data.tile_type_obj, readonly=True)
 
-    form.action.choices = [(tileaction.code or str(tileaction.id), tileaction.name) for tileaction in allowed_actions]
-    return render_template("gameTile.html", player_char=user_profile, form=form, tile_type_obj=tile_type_obj)
+    # Active tile - show available actions
+    form.action.choices = [
+        (action.code or str(action.id), action.name) 
+        for action in tile_data.allowed_actions
+    ]
+    return render_template("gameTile.html", player_char=user_profile, form=form, 
+                         tile_type_obj=tile_data.tile_type_obj)
 
 
 @main_bp.route("/player/<int:player_id>/game/tile/next", methods=["POST", "GET"])
@@ -316,11 +309,11 @@ def generate_tile(player_id):
         allowed_actions = all_actions
 
     tile_details.action.choices = [
-        (action.code or str(action.id), action.name) 
+        (action.code or str(action.id), action.name)
         for action in tile_data.allowed_actions
     ]
 
-    return render_template("gameTile.html", player_char=user_profile, form=tile_details, 
+    return render_template("gameTile.html", player_char=user_profile, form=tile_details,
                          tile_type_obj=tile_data.tile_type_obj)
 
 
@@ -427,18 +420,14 @@ def execute_tile_action(playerid, tile_id):
         # Get tile type
         tile_type = model.db.session.get(model.TileTypeOption, tile_record.type)
         tile_type_name = tile_type.name if tile_type else None
-        if action_name == "rest":
-            # Check if resting on a monster tile
-            if tile_type_name == "monster":
-                # Lose 50% of HP or 10 HP, whichever is greater
-                damage = max(int(player_record.hitpoints * 0.5), 10)
-                player_record.take_damage(damage)
-                action_result = f"Resting near a monster is dangerous! You lost {damage} HP."
-                flash(action_result)
-            else:
-                player_record.heal(10)
-                action_result = "You rest and recover 10 HP."
-                flash(action_result)
+
+        # Execute action using combat service
+        combat_result = combat_service.execute_action(
+            player=player_record,
+            tile=tile_record,
+            action_name=action_name,
+            tile_type_name=tile_type_name
+        )
 
         # Get or create action record for history tracking
         action_history_id = combat_service.get_or_create_action_record(
@@ -485,21 +474,21 @@ def execute_tile_action(playerid, tile_id):
     # If the client expects JSON (AJAX), return the action result and an HTML fragment
     if is_ajax:
         tile_html = render_template(
-            "_tile_fragment.html", 
-            player_char=player_record, 
-            form=form, 
-            tile_type_obj=tile_type_obj, 
-            readonly=True, 
+            "_tile_fragment.html",
+            player_char=player_record,
+            form=form,
+            tile_type_obj=tile_type_obj,
+            readonly=True,
             action_result=combat_result.message
         )
         return jsonify(ok=True, action_result=combat_result.message, tile_html=tile_html)
 
     return render_template(
-        "gameTile.html", 
-        player_char=player_record, 
-        form=form, 
-        tile_type_obj=tile_type_obj, 
-        readonly=True, 
+        "gameTile.html",
+        player_char=player_record,
+        form=form,
+        tile_type_obj=tile_type_obj,
+        readonly=True,
         action_result=combat_result.message
     )
 

@@ -128,9 +128,6 @@ class ActionOption(Model):
     def __init__(self, name=None):
         self.name = name
 
-    def __init__(self, name=None):
-        self.name = name
-
 
 class TileTypeOption(Model):
     __tablename__ = "tiletypeoption"
