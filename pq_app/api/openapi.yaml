@@ -560,11 +560,17 @@ paths:
             type: integer
       responses:
         '200':
-          description: Current tile
+          description: Current tile (includes points_balance)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Tile'
+                type: object
+                allOf:
+                  - $ref: '#/components/schemas/Tile'
+                properties:
+                  points_balance:
+                    type: integer
+                    example: 25
 
   /player/{player_id}/tiles/{tile_id}:
     get:
@@ -586,11 +592,17 @@ paths:
             type: integer
       responses:
         '200':
-          description: Tile information
+          description: Tile information (includes points_balance)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Tile'
+                type: object
+                allOf:
+                  - $ref: '#/components/schemas/Tile'
+                properties:
+                  points_balance:
+                    type: integer
+                    example: 25
 
   /player/{player_id}/tiles/{tile_id}/action:
     post:
@@ -627,7 +639,7 @@ paths:
                   example: "attack_light"
       responses:
         '200':
-          description: Action result
+          description: Action result (includes points_balance)
           content:
             application/json:
               schema:
@@ -638,6 +650,8 @@ paths:
                   message:
                     type: string
                   player_hp:
+                    type: integer
+                  points_balance:
                     type: integer
                   gold_change:
                     type: integer
@@ -664,11 +678,17 @@ paths:
             type: integer
       responses:
         '200':
-          description: New tile
+          description: New tile (includes points_balance)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Tile'
+                type: object
+                allOf:
+                  - $ref: '#/components/schemas/Tile'
+                properties:
+                  points_balance:
+                    type: integer
+                    example: 25
 
   /player/{player_id}/tiles/{tile_id}/combat-actions:
     get:
@@ -690,7 +710,7 @@ paths:
             type: integer
       responses:
         '200':
-          description: Available combat actions
+          description: Available combat actions (includes points_balance)
           content:
             application/json:
               schema:
@@ -704,6 +724,8 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/CombatAction'
+                  points_balance:
+                    type: integer
 
   /player/{player_id}/combat/execute:
     post:
@@ -735,7 +757,7 @@ paths:
                   example: "attack_heavy"
       responses:
         '200':
-          description: Combat result
+          description: Combat result (includes points_balance)
           content:
             application/json:
               schema:
@@ -746,6 +768,8 @@ paths:
                   message:
                     type: string
                   player_hp:
+                    type: integer
+                  points_balance:
                     type: integer
                   damage_dealt:
                     type: integer

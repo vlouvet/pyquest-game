@@ -12,6 +12,7 @@ from .schemas import tile_schema, tiles_schema, action_result_schema, error_sche
 from ..model import db, User, Tile, Playthrough
 from ..services.tile_service import TileService
 from ..services.media_service import MediaService
+from ..services.player_service import PlayerService
 
 
 @api_v1.route("/player/<int:player_id>/tiles/current", methods=["GET"])
@@ -71,6 +72,9 @@ def get_current_tile(player_id):
     media_service = MediaService()
     ascii_art = media_service.get_tile_display_media(current_tile.id)
 
+    # Accrue points lazily
+    PlayerService().accrue_points(player)
+
     result = tile_schema.dump(tile_data.tile)
     result["tile_type_obj"] = {
         "id": tile_data.tile_type_obj.id,
@@ -79,6 +83,7 @@ def get_current_tile(player_id):
     }
     result["available_actions"] = [{"id": a.id, "code": a.code, "name": a.name} for a in tile_data.allowed_actions]
     result["ascii_art"] = ascii_art
+    result["points_balance"] = player.points
     
     # Add monster status if applicable
     if current_tile.monster_current_hp is not None:
@@ -133,6 +138,9 @@ def get_tile(player_id, tile_id):
     media_service = MediaService()
     ascii_art = media_service.get_tile_display_media(tile_id)
 
+    # Accrue points lazily
+    PlayerService().accrue_points(player)
+
     result = tile_schema.dump(tile_data.tile)
     result["tile_type_obj"] = {
         "id": tile_data.tile_type_obj.id,
@@ -141,6 +149,7 @@ def get_tile(player_id, tile_id):
     }
     result["available_actions"] = [{"id": a.id, "code": a.code, "name": a.name} for a in tile_data.allowed_actions]
     result["ascii_art"] = ascii_art
+    result["points_balance"] = player.points
     
     # Add monster status if applicable
     tile = db.session.get(Tile, tile_id)
@@ -216,15 +225,22 @@ def execute_tile_action(player_id, tile_id):
 
     combat_service = CombatService()
 
+    # Spend a point non-blocking before action
+    PlayerService().spend_point(player)
+
     result = combat_service.execute_action(
         player_char=player, tile=tile_data.tile, action_code=action_code, combat_action_code=combat_action_code
     )
 
     # Prepare response
+    # Accrue points lazily after action (if hour elapsed)
+    PlayerService().accrue_points(player)
+
     response_data = {
         "success": result.get("success", False),
         "message": result.get("message", ""),
         "player_hp": player.hit_points,
+        "points_balance": player.points,
         "gold_change": result.get("gold_change", 0),
         "experience_change": result.get("experience_change", 0),
         "next_tile_id": None,
@@ -307,6 +323,9 @@ def advance_to_next_tile(player_id):
         media_service = MediaService()
         ascii_art = media_service.get_tile_display_media(new_tile.id)
 
+        # Accrue points lazily
+        PlayerService().accrue_points(player)
+
         result = tile_schema.dump(tile_data.tile)
         result["tile_type_obj"] = {
             "id": tile_data.tile_type_obj.id,
@@ -315,6 +334,7 @@ def advance_to_next_tile(player_id):
         }
         result["available_actions"] = [{"id": a.id, "code": a.code, "name": a.name} for a in tile_data.allowed_actions]
         result["ascii_art"] = ascii_art
+        result["points_balance"] = player.points
 
         return jsonify(result), 200
     except SQLAlchemyError as e:

@@ -11,6 +11,7 @@ from . import api_v1, limiter
 from .schemas import combat_action_schema, combat_actions_schema, encounter_schema, error_schema
 from ..model import db, User, Tile, CombatAction, Encounter
 from ..services.combat_service import CombatService
+from ..services.player_service import PlayerService
 
 
 @api_v1.route("/player/<int:player_id>/tiles/<int:tile_id>/combat-actions", methods=["GET"])
@@ -49,10 +50,18 @@ def get_combat_actions(player_id, tile_id):
 
     # Get available actions
     combat_service = CombatService()
+    # Accrue points lazily
+    PlayerService().accrue_points(player)
+
     actions = combat_service.get_available_actions(player)
 
     return (
-        jsonify({"tile_id": tile_id, "tile_type": tile.type, "available_actions": combat_actions_schema.dump(actions)}),
+        jsonify({
+            "tile_id": tile_id,
+            "tile_type": tile.type,
+            "available_actions": combat_actions_schema.dump(actions),
+            "points_balance": player.points,
+        }),
         200,
     )
 
@@ -132,6 +141,9 @@ def execute_combat_action_api(player_id):
                 404,
             )
 
+        # Spend a point non-blocking before combat action
+        PlayerService().spend_point(player)
+
         # Execute combat action
         combat_service = CombatService()
         result = combat_service.execute_combat_action(player=player, tile=tile, combat_action=combat_action)
@@ -139,10 +151,14 @@ def execute_combat_action_api(player_id):
         # Convert CombatResult to dict
         result_dict = result.to_dict()
 
+        # Accrue points lazily after action
+        PlayerService().accrue_points(player)
+
         response_data = {
             "success": result_dict.get("success", False),
             "message": result_dict.get("message", ""),
             "player_hp": player.hitpoints,
+            "points_balance": player.points,
             "player_hp_change": result_dict.get("player_hp_change", 0),
             "tile_completed": result_dict.get("tile_completed", False),
         }

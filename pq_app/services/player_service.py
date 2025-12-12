@@ -16,8 +16,11 @@ class PlayerService:
         Lazily accrue points at 5 points per whole hour elapsed since last accrual.
         Returns number of points added.
         """
+        # Use timezone-aware UTC datetimes. If stored value is naive, assume UTC.
         now = datetime.now(timezone.utc)
         last = user.last_points_accrual_at
+        if isinstance(last, datetime) and last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
         if last is None:
             # Initialize accrual timestamp without awarding immediately to avoid burst on first run
             user.last_points_accrual_at = now
@@ -31,7 +34,7 @@ class PlayerService:
         added = 5 * hours
         user.points = (user.points or 0) + added
         # Advance accrual timestamp by whole hours to preserve remainder
-        user.last_points_accrual_at = last + timedelta(hours=hours)
+        user.last_points_accrual_at = (last + timedelta(hours=hours)).astimezone(timezone.utc)
         self.db.add(user)
         return added
 
