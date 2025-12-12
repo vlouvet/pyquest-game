@@ -425,13 +425,23 @@ paths:
       responses:
         '200':
           description: Character information
-          content:
-            application/json:
+          '200':
+            description: Character information (includes points)
               schema:
                 $ref: '#/components/schemas/PlayerCharacter'
         '403':
           description: Access denied
-          content:
+                  properties:
+                    id: { type: integer }
+                    user_id: { type: integer }
+                    char_name: { type: string }
+                    char_class: { type: string, nullable: true }
+                    char_race: { type: string, nullable: true }
+                    hit_points: { type: integer }
+                    max_hit_points: { type: integer }
+                    level: { type: integer }
+                    experience: { type: integer }
+                    points: { type: integer }
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
@@ -516,14 +526,22 @@ paths:
                         type: number
                         format: float
                       total_damage_dealt:
-                        type: integer
-                      total_damage_received:
+                      '200':
+                        description: Character statistics including encounter history and points
                         type: integer
                       average_damage_dealt:
                         type: number
                         format: float
 
-  /player/{player_id}/tiles/current:
+                                character:
+                                  type: object
+                                  properties:
+                                    id: { type: integer }
+                                    user_id: { type: integer }
+                                    char_name: { type: string }
+                                    hit_points: { type: integer }
+                                    max_hit_points: { type: integer }
+                                    points: { type: integer }
     get:
       tags:
         - Tiles
@@ -533,16 +551,26 @@ paths:
       parameters:
         - name: player_id
           in: path
+                                recent_encounters:
+                                  type: array
+                                  items:
+                                    $ref: '#/components/schemas/Encounter'
           required: true
           schema:
             type: integer
       responses:
         '200':
-          description: Current tile
+          description: Current tile (includes points_balance)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Tile'
+                type: object
+                allOf:
+                  - $ref: '#/components/schemas/Tile'
+                properties:
+                  points_balance:
+                    type: integer
+                    example: 25
 
   /player/{player_id}/tiles/{tile_id}:
     get:
@@ -564,11 +592,17 @@ paths:
             type: integer
       responses:
         '200':
-          description: Tile information
+          description: Tile information (includes points_balance)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Tile'
+                type: object
+                allOf:
+                  - $ref: '#/components/schemas/Tile'
+                properties:
+                  points_balance:
+                    type: integer
+                    example: 25
 
   /player/{player_id}/tiles/{tile_id}/action:
     post:
@@ -605,7 +639,7 @@ paths:
                   example: "attack_light"
       responses:
         '200':
-          description: Action result
+          description: Action result (includes points_balance)
           content:
             application/json:
               schema:
@@ -616,6 +650,8 @@ paths:
                   message:
                     type: string
                   player_hp:
+                    type: integer
+                  points_balance:
                     type: integer
                   gold_change:
                     type: integer
@@ -642,11 +678,17 @@ paths:
             type: integer
       responses:
         '200':
-          description: New tile
+          description: New tile (includes points_balance)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Tile'
+                type: object
+                allOf:
+                  - $ref: '#/components/schemas/Tile'
+                properties:
+                  points_balance:
+                    type: integer
+                    example: 25
 
   /player/{player_id}/tiles/{tile_id}/combat-actions:
     get:
@@ -668,7 +710,7 @@ paths:
             type: integer
       responses:
         '200':
-          description: Available combat actions
+          description: Available combat actions (includes points_balance)
           content:
             application/json:
               schema:
@@ -682,6 +724,8 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/CombatAction'
+                  points_balance:
+                    type: integer
 
   /player/{player_id}/combat/execute:
     post:
@@ -713,7 +757,7 @@ paths:
                   example: "attack_heavy"
       responses:
         '200':
-          description: Combat result
+          description: Combat result (includes points_balance)
           content:
             application/json:
               schema:
@@ -724,6 +768,8 @@ paths:
                   message:
                     type: string
                   player_hp:
+                    type: integer
+                  points_balance:
                     type: integer
                   damage_dealt:
                     type: integer

@@ -11,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from . import api_v1
 from .schemas import error_schema
 from ..model import db, User, Encounter
+from ..services.player_service import PlayerService
 
 
 def _format_user_as_character(user):
@@ -48,6 +49,7 @@ def get_characters():
 
     return jsonify({"characters": [_format_user_as_character(user)]}), 200
 
+    return jsonify({"characters": [_format_user_as_character(user)]}), 200
 
 @api_v1.route("/player/characters", methods=["POST"])
 @jwt_required()
@@ -102,7 +104,12 @@ def get_character(character_id):
             403,
         )
 
-    return jsonify(_format_user_as_character(character)), 200
+    # Accrue points lazily on API request
+    PlayerService().accrue_points(character)
+    # Include points in the character payload
+    payload = _format_user_as_character(character)
+    payload["points"] = character.points
+    return jsonify(payload), 200
 
 
 @api_v1.route("/player/characters/<int:character_id>", methods=["PATCH"])
@@ -199,16 +206,26 @@ def get_character_stats(character_id):
         )
 
     # Get encounter statistics
-    encounters = Encounter.query.filter_by(user_id=character_id).all()
+    # Accrue points lazily on stats request
+    PlayerService().accrue_points(character)
+    encounters = Encounter.query.filter_by(user_id=character_id).order_by(Encounter.created_at.desc()).all()
     total_encounters = len(encounters)
     successful_encounters = sum(1 for e in encounters if e.was_successful)
     total_damage_dealt = sum(e.damage_dealt or 0 for e in encounters)
     total_damage_received = sum(e.damage_received or 0 for e in encounters)
 
+    # Include recent encounters and points in response
+    recent = encounters[:10]
+    from .schemas import EncounterSchema
+    recent_encounters = EncounterSchema(many=True).dump(recent)
+
+    character_payload = _format_user_as_character(character)
+    character_payload["points"] = character.points
+
     return (
         jsonify(
             {
-                "character": _format_user_as_character(character),
+                "character": character_payload,
                 "statistics": {
                     "total_encounters": total_encounters,
                     "successful_encounters": successful_encounters,
@@ -221,6 +238,7 @@ def get_character_stats(character_id):
                         round(total_damage_dealt / total_encounters, 2) if total_encounters > 0 else 0
                     ),
                 },
+                "recent_encounters": recent_encounters,
             }
         ),
         200,

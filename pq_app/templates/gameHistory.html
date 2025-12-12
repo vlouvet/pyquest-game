@@ -19,6 +19,26 @@
             <td>{{ tile.tile_action.name if tile.tile_action else 'N/A' }}</td>
             <td>{{ tile.content }}</td>
         </tr>
+        {% if tile_encounters and tile_encounters.get(tile.id) %}
+        <tr>
+            <td colspan="4">
+                <strong>Combat Log</strong>
+                <ul>
+                    {% for e in tile_encounters.get(tile.id) %}
+                    <li>
+                        [{{ e.created_at.strftime('%Y-%m-%d %H:%M') }}]
+                        {{ e.result_message or 'Action executed' }}
+                        — Player HP: {{ e.player_hp_before }} → {{ e.player_hp_after }}
+                        {% if e.monster_hp_before is not none %}
+                        — Monster HP: {{ e.monster_hp_before }} → {{ e.monster_hp_after }}
+                        {% endif %}
+                        — Dealt: {{ e.damage_dealt or 0 }}, Received: {{ e.damage_received or 0 }}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </td>
+        </tr>
+        {% endif %}
         {% endfor %}
     </tbody>
 </table>

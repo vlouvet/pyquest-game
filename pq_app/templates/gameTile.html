@@ -4,6 +4,11 @@
 
 {% block content %}
     <h1>PyQuest Game</h1>
+    <div class="player-status" style="margin-bottom:8px;">
+        <strong>{{ player_char.username }}</strong>
+        — HP: {{ player_char.hitpoints }}/{{ player_char.max_hp }}
+        — Points: {{ points_balance if points_balance is defined else (player_char.points or 0) }}
+    </div>
     <h2>Tile # {{form.tileid}}</h2>
     <div id="tile-mount">
         {% if ascii_art %}
