@@ -262,6 +262,12 @@ def generate_tile(player_id):
 
     # Initialize tile service
     tile_service = TileService()
+    # Points handling: warn if out, accrue lazily before proceeding to next tile
+    player_service = PlayerService()
+    points_before = user_profile.points or 0
+    if points_before <= 0:
+        flash("You're out of points. Proceeding is allowed; you'll accrue +5/hour.")
+    player_service.accrue_points(user_profile)
 
     # Get last tile record for the user
     tile_record = tile_service.get_latest_tile(player_id)
@@ -460,9 +466,12 @@ def execute_tile_action(playerid, tile_id):
         # Check for combat_action_code parameter (for enhanced combat)
         combat_action_code = request.form.get("combat_action_code")
 
-        # Accrue points lazily and spend one point before executing action
+        # Points handling: warn if out, accrue lazily, then spend non-blocking
+        points_before = player_record.points or 0
+        if points_before <= 0:
+            if not is_ajax:
+                flash("You're out of points. Actions still work; you'll accrue +5/hour.")
         player_service.accrue_points(player_record)
-        # Spend a point, but do not block actions if balance is 0
         player_service.spend_point(player_record)
 
         # Execute action using combat service
