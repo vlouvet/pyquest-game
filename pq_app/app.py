@@ -452,6 +452,7 @@ def execute_tile_action(playerid, tile_id):
 
         # Get player
         # Get player
+        # Get player
         player_record = model.db.session.get(model.User, playerid)
         if not player_record:
             if is_ajax:
@@ -499,12 +500,14 @@ def execute_tile_action(playerid, tile_id):
 
     # Check if player is still alive after action
     if not combat_result.player_alive:
+    if not combat_result.player_alive:
         if is_ajax:
             return jsonify(error="You have fallen in battle..."), 200
         flash("You have fallen in battle...")
         return redirect(url_for("main.game_over", player_id=playerid))
 
     # If the player chose to quit, end the journey and return to the main/dashboard
+    if combat_result.should_end_playthrough:
     if combat_result.should_end_playthrough:
         if is_ajax:
             return jsonify(ok=True, redirect=url_for("main.greet_user"))

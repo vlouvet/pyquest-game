@@ -49,6 +49,7 @@ def get_characters():
 
     return jsonify({"characters": [_format_user_as_character(user)]}), 200
 
+    return jsonify({"characters": [_format_user_as_character(user)]}), 200
 
 @api_v1.route("/player/characters", methods=["POST"])
 @jwt_required()

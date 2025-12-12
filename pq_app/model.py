@@ -168,6 +168,7 @@ class TileTypeOption(Model):
     ascii_art = db.Column(db.Text, nullable=True)
 
     def __init__(self, name=None, ascii_art=None):
+    def __init__(self, name=None, ascii_art=None):
         self.name = name
         self.ascii_art = ascii_art
         self.ascii_art = ascii_art
