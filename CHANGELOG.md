@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here. This project follows a date-based changelog. For migration-specific details, see `MIGRATIONS.md`.
 
+## 2026-06-04
+
+### Fixed
+- Combat is winnable again: monster tiles created by the web routes now initialize
+  persistent monster HP (previously NULL), so attacks reduce HP and defeat completes the
+  tile. All tile creation goes through `TileService.create_tile`.
+- Monster tiles can no longer be bypassed by `inspect`/`rest` while the monster is alive.
+- Character setup now validates the form (and enforces CSRF) before saving.
+- Flashed messages now render on every page (login errors, out-of-points warnings, etc.).
+- AJAX combat survives tile re-renders: the combat modal reopens for follow-up attacks
+  (event delegation), the duplicate `#tile-mount` id is gone, and a monster HP bar is shown.
+- `init_defaults` no longer seeds duplicate player classes (was 6, now 3).
+- `_execute_quit` no longer rolls back the caller's transaction.
+
+### Changed
+- Single source of truth for monster HP; the tile's displayed HP matches combat HP.
+- Removed duplicated/merge-artifact code in `app.py` and `model.py`.
+
 ## 2025-12-11
 
 ### Added
