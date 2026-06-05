@@ -8,7 +8,7 @@ from flask_login import (
     current_user,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
-from . import model, gameforms, pqMonsters, gameTile
+from . import model, gameforms
 from .services import CombatService, TileService, MediaService
 from .services.player_service import PlayerService
 
@@ -106,8 +106,8 @@ def setup_char(player_id):
         {"name": tile_type.name, "id": tile_type.id} for tile_type in model.TileTypeOption.query.order_by("name")
     ]
     tile_type = random.choice(tile_type_list)
-    if request.method == "POST":
-        # Manually set playerclass and playerrace from form data
+    # Validate the submission (this also enforces CSRF) before mutating the profile.
+    if form.validate_on_submit():
         user_profile.playerclass = form.charclass.data
         user_profile.playerrace = form.charrace.data
         # if no tile exists for this user, create a tile
@@ -124,17 +124,12 @@ def setup_char(player_id):
                 tile_type_id=tile_type["id"],
             )
             model.db.session.add(current_tile)
-        form = gameforms.TileForm()
-        form.type.data = tile_type["name"]
         user_profile.hitpoints = 100
         model.db.session.add(user_profile)
         model.db.session.commit()
-        print("profile saved")
         return redirect(url_for("main.char_start", id=user_profile_id))
-    elif request.method == "GET":
-        return render_template("charsetup.html", player_char=user_profile, form=form)
-    else:
-        return {"Error": "Invalid request method"}
+    # GET, or POST with validation/CSRF errors: render the setup form (with any errors).
+    return render_template("charsetup.html", player_char=user_profile, form=form)
 
 
 @main_bp.route("/player/<int:id>/start", methods=["POST", "GET"])
@@ -161,7 +156,6 @@ def char_start(id):
 @login_required
 def get_tile(player_id):
     """Display the current tile for a player"""
-    """Display the current tile for a player"""
     # Authorization check
     if current_user.id != player_id:
         abort(403)
@@ -185,7 +179,6 @@ def get_tile(player_id):
         return redirect(url_for("main.greet_user"))
 
     # Get the most recent tile from the active playthrough
-    tile_details = tile_service.get_latest_tile(player_id, active_playthrough.id)
     tile_details = tile_service.get_latest_tile(player_id, active_playthrough.id)
     if not tile_details:
         flash("No tile found for this player; please set up your character or generate a tile.")
@@ -315,7 +308,6 @@ def start_journey(player_id):
 @login_required
 def execute_tile_action(playerid, tile_id):
     """Execute an action on a tile using CombatService"""
-    """Execute an action on a tile using CombatService"""
     # Authorization check
     if current_user.id != playerid:
         abort(403)
@@ -324,7 +316,6 @@ def execute_tile_action(playerid, tile_id):
     if request.method != "POST":
         return {"status_code": 402}
 
-    # Detect AJAX/JSON requests - only check X-Requested-With header for stricter detection
     # Detect AJAX/JSON requests - only check X-Requested-With header for stricter detection
     is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
@@ -359,24 +350,7 @@ def execute_tile_action(playerid, tile_id):
                 if is_ajax:
                     return jsonify(error=error_msg), 400
                 abort(400, description=error_msg)
-        tile_record = combat_service.get_tile_with_lock(tile_id)
 
-        # Validate tile
-        is_valid, error_msg = combat_service.validate_tile_action(tile_record)
-        if not is_valid:
-            if error_msg == "Tile already actioned":
-                # Redirect to get_tile to show the tile in readonly mode
-                if is_ajax:
-                    return jsonify(redirect=url_for("main.get_tile", player_id=playerid)), 200
-                return redirect(url_for("main.get_tile", player_id=playerid))
-            else:
-                # Tile not found or other error
-                if is_ajax:
-                    return jsonify(error=error_msg), 400
-                abort(400, description=error_msg)
-
-        # Get player
-        # Get player
         # Get player
         player_record = model.db.session.get(model.User, playerid)
         if not player_record:
@@ -420,7 +394,6 @@ def execute_tile_action(playerid, tile_id):
                 tile=tile_record, player=player_record, action_history_id=action_history_id
             )
 
-    # Transaction committed here
     # Transaction committed here
 
     # Check if player is still alive after action

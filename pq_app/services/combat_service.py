@@ -553,18 +553,14 @@ class CombatService:
         message = "You decide to retreat from this challenge."
         flash(message)
 
-        # Mark the playthrough as ended
-        playthrough_ended = False
-        try:
-            if tile and tile.playthrough_id:
-                pt = self.db.get(model.Playthrough, tile.playthrough_id)
-                if pt:
-                    pt.ended_at = datetime.now(timezone.utc)
-                    self.db.add(pt)
-                    playthrough_ended = True
-        except Exception:
-            # Don't let playthrough ending failures block the response
-            self.db.rollback()
+        # Mark the playthrough as ended. This runs inside the caller's transaction, so we do
+        # NOT roll back here (that would discard the caller's other writes / the tile lock);
+        # let any failure propagate to the route, which owns the transaction boundary.
+        if tile and tile.playthrough_id:
+            pt = self.db.get(model.Playthrough, tile.playthrough_id)
+            if pt:
+                pt.ended_at = datetime.now(timezone.utc)
+                self.db.add(pt)
 
         return CombatResult(
             success=True,

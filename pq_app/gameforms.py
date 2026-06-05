@@ -7,12 +7,14 @@ from wtforms import (
     SubmitField,
     BooleanField,
 )
-from wtforms.validators import DataRequired, Length, EqualTo, ValidationError
+from wtforms.validators import DataRequired, Length, EqualTo, ValidationError, Optional
 from . import model  # Import the model module
 
 
 class CharacterForm(FlaskForm):
-    name = StringField("Character Name", validators=[DataRequired()])
+    # Name is currently not persisted (the User model has no display-name column), so it is
+    # optional rather than required; class and race are the meaningful inputs.
+    name = StringField("Character Name", validators=[Optional()])
     charclass = SelectField("Character Class", coerce=int, validators=[DataRequired()])
     charrace = SelectField("Character Race", coerce=int, validators=[DataRequired()])
 
