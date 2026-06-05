@@ -175,6 +175,17 @@ class CombatService:
         Returns:
             CombatResult with action outcome
         """
+        # Defensive: a monster tile must always carry persistent HP so damage sticks and the
+        # monster can actually be defeated. If it is missing (legacy/edge-case tiles),
+        # initialize it from the configured range before resolving the action.
+        if tile.monster_current_hp is None:
+            cfg = current_app.config if current_app else {}
+            hp_min = int(cfg.get("MONSTER_HP_MIN", 60))
+            hp_max = int(cfg.get("MONSTER_HP_MAX", 120))
+            init_hp = random.randint(hp_min, hp_max)
+            tile.monster_max_hp = init_hp
+            tile.monster_current_hp = init_hp
+
         # Use tile's persistent monster HP if available, otherwise default
         if monster_hp is None:
             monster_hp = tile.monster_current_hp if tile.monster_current_hp is not None else 50
