@@ -390,12 +390,14 @@ class CombatService:
                 result_message=message,
             )
             self.db.add(encounter)
+            # Resting does not defeat the monster: a live monster keeps the tile active so
+            # it cannot be bypassed without actually fighting (or fleeing).
             return CombatResult(
                 success=True,
                 message=message,
                 player_hp_change=-damage,
                 player_alive=player.is_alive,
-                tile_completed=True,
+                tile_completed=not tile.is_monster_alive,
             )
         else:
             # Safe rest - heal 10 HP
@@ -467,8 +469,14 @@ class CombatService:
                 result_message=message,
             )
             self.db.add(encounter)
+            # Inspecting a live monster gathers info but does not end the encounter, so the
+            # tile cannot be cleared by simply observing the monster.
             return CombatResult(
-                success=True, message=message, player_hp_change=0, player_alive=True, tile_completed=True
+                success=True,
+                message=message,
+                player_hp_change=0,
+                player_alive=True,
+                tile_completed=not tile.is_monster_alive,
             )
 
         elif tile_type_name == "treasure":
