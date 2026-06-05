@@ -2,7 +2,9 @@
 Player Service - Points accrual and spending logic
 """
 from datetime import datetime, timezone, timedelta
-from typing import Tuple
+from typing import Tuple, Dict, Any
+
+from flask import current_app
 
 from .. import model
 
@@ -10,6 +12,50 @@ from .. import model
 class PlayerService:
     def __init__(self, db_session=None):
         self.db = db_session or model.db.session
+
+    def xp_to_next(self, level: int) -> int:
+        """XP required to advance from the given level to the next one."""
+        cfg = current_app.config if current_app else {}
+        base = int(cfg.get("XP_BASE", 100))
+        growth = float(cfg.get("XP_GROWTH", 1.5))
+        return int(base * (growth ** max(0, level - 1)))
+
+    def award_xp(self, user: model.User, amount: int) -> Dict[str, Any]:
+        """
+        Award XP to a player, applying any resulting level-ups.
+
+        exp_points tracks progress toward the next level (it resets on each level up).
+        Each level grants HP_PER_LEVEL max HP and heals the player by that amount.
+
+        Returns a summary dict describing what happened.
+        """
+        amount = max(0, int(amount))
+        cfg = current_app.config if current_app else {}
+        hp_per_level = int(cfg.get("HP_PER_LEVEL", 10))
+
+        user.exp_points = (user.exp_points or 0) + amount
+        levels_gained = 0
+        hp_gained = 0
+        # Loop so a single large award can grant multiple levels.
+        while user.exp_points >= self.xp_to_next(user.level):
+            user.exp_points -= self.xp_to_next(user.level)
+            user.level += 1
+            user.max_hp += hp_per_level
+            hp_gained += hp_per_level
+            levels_gained += 1
+
+        if hp_gained:
+            user.heal(hp_gained)
+        self.db.add(user)
+
+        return {
+            "xp_awarded": amount,
+            "leveled_up": levels_gained > 0,
+            "levels_gained": levels_gained,
+            "new_level": user.level,
+            "hp_gained": hp_gained,
+            "xp_to_next": self.xp_to_next(user.level),
+        }
 
     def accrue_points(self, user: model.User) -> int:
         """

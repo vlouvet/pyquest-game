@@ -5,6 +5,7 @@
 <div class="player-status" style="margin-bottom:8px;">
     <strong>{{ player_char.username }}</strong>
     — HP: {{ player_char.hitpoints }}/{{ player_char.max_hp }}
+    — Lvl: {{ player_char.level }} (XP: {{ player_char.exp_points }})
     — Points: {{ points_balance if points_balance is defined else (player_char.points or 0) }}
 </div>
 <h2>Tile # {{ form.tileid.data }}</h2>

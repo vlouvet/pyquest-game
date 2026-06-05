@@ -100,6 +100,8 @@ class Tile(Model):
     # Monster combat tracking (for monster tiles)
     monster_max_hp = db.Column(db.Integer, nullable=True)  # Monster's maximum HP
     monster_current_hp = db.Column(db.Integer, nullable=True)  # Monster's current HP (null for non-monster tiles)
+    # Transient defense queued by a Defend action, consumed by the next counter-attack
+    player_defense_pending = db.Column(db.Integer, nullable=True)
 
     # Relationships - specify foreign_keys to resolve ambiguity
     tile_type = db.relationship("TileTypeOption", foreign_keys=[type], backref="tiles")
@@ -116,6 +118,7 @@ class Tile(Model):
         playthrough_id=None,
         monster_max_hp=None,
         monster_current_hp=None,
+        player_defense_pending=None,
     ):
         self.user_id = user_id
         self.type = type
@@ -125,6 +128,7 @@ class Tile(Model):
         self.playthrough_id = playthrough_id
         self.monster_max_hp = monster_max_hp
         self.monster_current_hp = monster_current_hp
+        self.player_defense_pending = player_defense_pending
 
     @property
     def is_monster_alive(self) -> bool:

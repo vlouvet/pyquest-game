@@ -14,6 +14,11 @@ class Config:
     COUNTER_DAMAGE_MIN = int(os.environ.get('COUNTER_DAMAGE_MIN', 5))
     COUNTER_DAMAGE_MAX = int(os.environ.get('COUNTER_DAMAGE_MAX', 15))
     HEALING_NERF_PERCENT = int(os.environ.get('HEALING_NERF_PERCENT', 20))
+    # XP / leveling knobs
+    XP_BASE = int(os.environ.get('XP_BASE', 100))            # XP needed for level 1 -> 2
+    XP_GROWTH = float(os.environ.get('XP_GROWTH', 1.5))      # per-level XP multiplier
+    HP_PER_LEVEL = int(os.environ.get('HP_PER_LEVEL', 10))   # max HP gained per level
+    XP_PER_MONSTER_HP = float(os.environ.get('XP_PER_MONSTER_HP', 1.0))  # XP per point of monster max HP
 
 
 class DevelopmentConfig(Config):

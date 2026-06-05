@@ -4,6 +4,15 @@ All notable changes to this project are documented here. This project follows a 
 
 ## 2026-06-04
 
+### Added
+- XP & leveling: defeating a monster awards XP (scaled by its max HP); crossing the XP
+  curve levels the player up, granting max HP and healing. Level/XP shown in the status
+  bar and profile. Tunable via `XP_BASE`, `XP_GROWTH`, `HP_PER_LEVEL`, `XP_PER_MONSTER_HP`.
+- Defense stance: `Defend` (and defensive race abilities) now reduce the next incoming
+  counter-attack (new `tile.player_defense_pending`, migration `0009`).
+- Flee now works: success ends the encounter (no reward); failure provokes a free
+  counter-attack.
+
 ### Fixed
 - Combat is winnable again: monster tiles created by the web routes now initialize
   persistent monster HP (previously NULL), so attacks reduce HP and defeat completes the
