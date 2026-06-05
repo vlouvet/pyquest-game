@@ -85,14 +85,14 @@ class TileService:
         new_tile.user_id = user_id
         new_tile.playthrough_id = playthrough_id
 
-        # Generate content based on type
         tile_type_obj = self.db.get(model.TileTypeOption, tile_type_id)
         tile_type_name = tile_type_obj.name if tile_type_obj else None
-        new_tile.content = self.generate_tile_content(tile_type_name)
 
-        # Initialize monster HP for monster tiles
+        # Initialize monster HP for monster tiles and derive the display content from the
+        # same HP value so what the player sees matches what combat uses (single source).
         if tile_type_name == "monster":
             # Tougher monsters: configurable HP range
+            monster_name = pqMonsters.NPCMonster().name
             cfg = current_app.config if current_app else {}
             hp_min = cfg.get("MONSTER_HP_MIN", 60)
             hp_max = cfg.get("MONSTER_HP_MAX", 120)
@@ -101,6 +101,9 @@ class TileService:
             monster_hp = int(base_hp * float(multiplier))
             new_tile.monster_max_hp = monster_hp
             new_tile.monster_current_hp = monster_hp
+            new_tile.content = f"{monster_name} ({monster_hp} HP)"
+        else:
+            new_tile.content = self.generate_tile_content(tile_type_name)
 
         return new_tile
 

@@ -12,6 +12,7 @@ from flask import flash
 from sqlalchemy import select, or_
 
 from .. import model
+from .player_service import PlayerService
 from flask import current_app
 
 
@@ -175,6 +176,22 @@ class CombatService:
         Returns:
             CombatResult with action outcome
         """
+        # Flee is resolved separately: success ends the encounter, failure gives the monster
+        # a free counter-attack.
+        if combat_action.code == "flee":
+            return self._execute_flee(player, tile, combat_action)
+
+        # Defensive: a monster tile must always carry persistent HP so damage sticks and the
+        # monster can actually be defeated. If it is missing (legacy/edge-case tiles),
+        # initialize it from the configured range before resolving the action.
+        if tile.monster_current_hp is None:
+            cfg = current_app.config if current_app else {}
+            hp_min = int(cfg.get("MONSTER_HP_MIN", 60))
+            hp_max = int(cfg.get("MONSTER_HP_MAX", 120))
+            init_hp = random.randint(hp_min, hp_max)
+            tile.monster_max_hp = init_hp
+            tile.monster_current_hp = init_hp
+
         # Use tile's persistent monster HP if available, otherwise default
         if monster_hp is None:
             monster_hp = tile.monster_current_hp if tile.monster_current_hp is not None else 50
@@ -224,9 +241,18 @@ class CombatService:
                 dmg_max = int(cfg.get("COUNTER_DAMAGE_MAX", 15))
                 if new_monster_hp > 0 and random.randint(1, 100) <= chance:
                     damage_received = random.randint(dmg_min, dmg_max)
-                    player.take_damage(damage_received)
-                    hp_change -= damage_received
-                    parts.append(f"received {damage_received} damage")
+                    # Consume any pending defense from a previous Defend action.
+                    defense = tile.player_defense_pending or 0
+                    if defense:
+                        blocked = min(damage_received, defense)
+                        damage_received -= blocked
+                        tile.player_defense_pending = None
+                        if blocked:
+                            parts.append(f"blocked {blocked} with defense")
+                    if damage_received > 0:
+                        player.take_damage(damage_received)
+                        hp_change -= damage_received
+                        parts.append(f"received {damage_received} damage")
 
             # Apply healing
             if combat_action.heal_amount > 0:
@@ -237,9 +263,20 @@ class CombatService:
                 hp_change += heal_applied
                 parts.append(f"healed {heal_applied} HP")
 
-            # Note defense boost (not yet implemented in player state)
+            # Queue defense to reduce the next incoming counter-attack.
             if combat_action.defense_boost > 0:
-                parts.append(f"gained +{combat_action.defense_boost} defense")
+                tile.player_defense_pending = (tile.player_defense_pending or 0) + combat_action.defense_boost
+                parts.append(f"gained +{combat_action.defense_boost} defense (reduces next hit)")
+
+            # Award XP (and apply level-ups) when the monster is defeated.
+            if monster_defeated:
+                xp = int((tile.monster_max_hp or 0) * float(cfg.get("XP_PER_MONSTER_HP", 1.0)))
+                xp_result = PlayerService(self.db).award_xp(player, xp)
+                parts.append(f"+{xp_result['xp_awarded']} XP")
+                if xp_result["leveled_up"]:
+                    parts.append(
+                        f"Leveled up to {xp_result['new_level']} (+{xp_result['hp_gained']} max HP)"
+                    )
 
             message = f"{combat_action.name}: " + ", ".join(parts) + "!"
             flash(message)
@@ -271,6 +308,58 @@ class CombatService:
             player_hp_change=hp_change,
             player_alive=player.is_alive,
             tile_completed=monster_defeated,  # Only complete tile when monster is defeated
+        )
+
+    def _execute_flee(
+        self, player: model.User, tile: model.Tile, combat_action: model.CombatAction
+    ) -> CombatResult:
+        """
+        Resolve a flee attempt. On success the player escapes and the encounter ends
+        (no reward). On failure the monster lands a free counter-attack (reduced by any
+        pending defense) and the encounter continues.
+        """
+        hp_before = player.hitpoints
+        roll = random.randint(1, 100)
+        success = roll <= (combat_action.success_rate or 0)
+        damage_received = 0
+
+        if success:
+            message = "You successfully fled from the encounter!"
+        else:
+            cfg = current_app.config if current_app else {}
+            dmg_min = int(cfg.get("COUNTER_DAMAGE_MIN", 5))
+            dmg_max = int(cfg.get("COUNTER_DAMAGE_MAX", 15))
+            damage_received = random.randint(dmg_min, dmg_max)
+            # Consume any pending defense.
+            defense = tile.player_defense_pending or 0
+            if defense:
+                damage_received = max(0, damage_received - defense)
+                tile.player_defense_pending = None
+            player.take_damage(damage_received)
+            message = f"You failed to flee! The monster hits you for {damage_received} damage."
+        flash(message)
+
+        encounter = model.Encounter(
+            tile_id=tile.id,
+            user_id=player.id,
+            combat_action_id=combat_action.id,
+            player_hp_before=hp_before,
+            player_hp_after=player.hitpoints,
+            monster_hp_before=tile.monster_current_hp,
+            monster_hp_after=tile.monster_current_hp,
+            damage_dealt=0,
+            damage_received=damage_received,
+            was_successful=success,
+            result_message=message,
+        )
+        self.db.add(encounter)
+
+        return CombatResult(
+            success=success,
+            message=message,
+            player_hp_change=-damage_received,
+            player_alive=player.is_alive,
+            tile_completed=success,  # Fleeing successfully ends (clears) the tile
         )
 
     def get_or_create_action_record(
@@ -379,12 +468,14 @@ class CombatService:
                 result_message=message,
             )
             self.db.add(encounter)
+            # Resting does not defeat the monster: a live monster keeps the tile active so
+            # it cannot be bypassed without actually fighting (or fleeing).
             return CombatResult(
                 success=True,
                 message=message,
                 player_hp_change=-damage,
                 player_alive=player.is_alive,
-                tile_completed=True,
+                tile_completed=not tile.is_monster_alive,
             )
         else:
             # Safe rest - heal 10 HP
@@ -456,8 +547,14 @@ class CombatService:
                 result_message=message,
             )
             self.db.add(encounter)
+            # Inspecting a live monster gathers info but does not end the encounter, so the
+            # tile cannot be cleared by simply observing the monster.
             return CombatResult(
-                success=True, message=message, player_hp_change=0, player_alive=True, tile_completed=True
+                success=True,
+                message=message,
+                player_hp_change=0,
+                player_alive=True,
+                tile_completed=not tile.is_monster_alive,
             )
 
         elif tile_type_name == "treasure":
@@ -534,18 +631,14 @@ class CombatService:
         message = "You decide to retreat from this challenge."
         flash(message)
 
-        # Mark the playthrough as ended
-        playthrough_ended = False
-        try:
-            if tile and tile.playthrough_id:
-                pt = self.db.get(model.Playthrough, tile.playthrough_id)
-                if pt:
-                    pt.ended_at = datetime.now(timezone.utc)
-                    self.db.add(pt)
-                    playthrough_ended = True
-        except Exception:
-            # Don't let playthrough ending failures block the response
-            self.db.rollback()
+        # Mark the playthrough as ended. This runs inside the caller's transaction, so we do
+        # NOT roll back here (that would discard the caller's other writes / the tile lock);
+        # let any failure propagate to the route, which owns the transaction boundary.
+        if tile and tile.playthrough_id:
+            pt = self.db.get(model.Playthrough, tile.playthrough_id)
+            if pt:
+                pt.ended_at = datetime.now(timezone.utc)
+                self.db.add(pt)
 
         return CombatResult(
             success=True,

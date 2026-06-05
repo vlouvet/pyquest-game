@@ -100,6 +100,8 @@ class Tile(Model):
     # Monster combat tracking (for monster tiles)
     monster_max_hp = db.Column(db.Integer, nullable=True)  # Monster's maximum HP
     monster_current_hp = db.Column(db.Integer, nullable=True)  # Monster's current HP (null for non-monster tiles)
+    # Transient defense queued by a Defend action, consumed by the next counter-attack
+    player_defense_pending = db.Column(db.Integer, nullable=True)
 
     # Relationships - specify foreign_keys to resolve ambiguity
     tile_type = db.relationship("TileTypeOption", foreign_keys=[type], backref="tiles")
@@ -116,6 +118,7 @@ class Tile(Model):
         playthrough_id=None,
         monster_max_hp=None,
         monster_current_hp=None,
+        player_defense_pending=None,
     ):
         self.user_id = user_id
         self.type = type
@@ -125,6 +128,7 @@ class Tile(Model):
         self.playthrough_id = playthrough_id
         self.monster_max_hp = monster_max_hp
         self.monster_current_hp = monster_current_hp
+        self.player_defense_pending = player_defense_pending
 
     @property
     def is_monster_alive(self) -> bool:
@@ -165,11 +169,9 @@ class TileTypeOption(Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String)
     ascii_art = db.Column(db.Text, nullable=True)
-    ascii_art = db.Column(db.Text, nullable=True)
 
     def __init__(self, name=None, ascii_art=None):
         self.name = name
-        self.ascii_art = ascii_art
         self.ascii_art = ascii_art
 
 
@@ -353,7 +355,6 @@ class TileMedia(Model):
 
 def init_defaults():
     """pre-populate action options and combat actions tables"""
-    """pre-populate action options and combat actions tables"""
     if ActionOption.query.first() is None:
         action_options = [
             {"name": "rest", "code": "rest"},
@@ -382,11 +383,6 @@ def init_defaults():
         db.session.commit()
 
     if PlayerClass.query.first() is None:
-        player_classes = [{"name": "witch"}, {"name": "fighter"}, {"name": "healer"}]
-        for pc in player_classes:
-            current_class = PlayerClass()
-            current_class.name = pc["name"]
-            db.session.add(current_class)
         player_classes = [{"name": "witch"}, {"name": "fighter"}, {"name": "healer"}]
         for pc in player_classes:
             current_class = PlayerClass()

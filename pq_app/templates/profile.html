@@ -4,7 +4,9 @@
 <h1>User Profile</h1>
 <p>Username: {{ player_char.username }}</p>
 <p>Email: {{ player_char.email }}</p>
-<p>Hitpoints: {{ player_char.hitpoints }}</p>
+<p>Hitpoints: {{ player_char.hitpoints }}/{{ player_char.max_hp }}</p>
+<p>Level: {{ player_char.level }}</p>
+<p>Experience: {{ player_char.exp_points }} XP</p>
 <p>Character Class: {{ player_char.player_class_rel.name if player_char.player_class_rel else 'N/A' }}</p>
 <p>Character Race: {{ player_char.player_race_rel.name if player_char.player_race_rel else 'N/A' }}</p>
 <a href="{{ url_for('main.get_history', player_id=player_char.id) }}">View Game History</a>

@@ -8,10 +8,9 @@ from flask_login import (
     current_user,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
-from . import model, gameforms, pqMonsters, gameTile
+from . import model, gameforms
 from .services import CombatService, TileService, MediaService
 from .services.player_service import PlayerService
-from .services import CombatService, TileService, MediaService
 
 # Create Blueprint
 main_bp = Blueprint("main", __name__)
@@ -107,44 +106,30 @@ def setup_char(player_id):
         {"name": tile_type.name, "id": tile_type.id} for tile_type in model.TileTypeOption.query.order_by("name")
     ]
     tile_type = random.choice(tile_type_list)
-    if request.method == "POST":
-        # Manually set playerclass and playerrace from form data
+    # Validate the submission (this also enforces CSRF) before mutating the profile.
+    if form.validate_on_submit():
         user_profile.playerclass = form.charclass.data
         user_profile.playerrace = form.charrace.data
         # if no tile exists for this user, create a tile
         if not model.Tile.query.filter_by(user_id=user_profile_id).first():
-            # create a new playthrough for this user and the initial tile
+            # create a new playthrough for this user and the initial tile.
+            # Route through TileService so monster HP is initialized consistently.
             new_play = model.Playthrough(user_id=user_profile_id)
             model.db.session.add(new_play)
             model.db.session.flush()
 
-            current_tile = model.Tile()
-            current_tile.user_id = user_profile_id
-            current_tile.type = tile_type["id"]
-            current_tile.playthrough_id = new_play.id
-            # Generate and save content to database based on tile type
-            tile_config = gameTile.pqGameTile()
-            if tile_type["name"] == "sign":
-                current_tile.content = tile_config.generate_signpost()
-            elif tile_type["name"] == "monster":
-                monster = pqMonsters.NPCMonster()
-                current_tile.content = f"{monster.name} ({monster.hitpoints} HP)"
-            elif tile_type["name"] == "scene":
-                current_tile.content = "This is a scene tile"
-            elif tile_type["name"] == "treasure":
-                current_tile.content = "This is a treasure tile"
+            current_tile = TileService().create_tile(
+                user_id=user_profile_id,
+                playthrough_id=new_play.id,
+                tile_type_id=tile_type["id"],
+            )
             model.db.session.add(current_tile)
-        form = gameforms.TileForm()
-        form.type.data = tile_type["name"]
         user_profile.hitpoints = 100
         model.db.session.add(user_profile)
         model.db.session.commit()
-        print("profile saved")
         return redirect(url_for("main.char_start", id=user_profile_id))
-    elif request.method == "GET":
-        return render_template("charsetup.html", player_char=user_profile, form=form)
-    else:
-        return {"Error": "Invalid request method"}
+    # GET, or POST with validation/CSRF errors: render the setup form (with any errors).
+    return render_template("charsetup.html", player_char=user_profile, form=form)
 
 
 @main_bp.route("/player/<int:id>/start", methods=["POST", "GET"])
@@ -171,7 +156,6 @@ def char_start(id):
 @login_required
 def get_tile(player_id):
     """Display the current tile for a player"""
-    """Display the current tile for a player"""
     # Authorization check
     if current_user.id != player_id:
         abort(403)
@@ -196,7 +180,6 @@ def get_tile(player_id):
 
     # Get the most recent tile from the active playthrough
     tile_details = tile_service.get_latest_tile(player_id, active_playthrough.id)
-    tile_details = tile_service.get_latest_tile(player_id, active_playthrough.id)
     if not tile_details:
         flash("No tile found for this player; please set up your character or generate a tile.")
         return redirect(url_for("main.setup_char", player_id=player_id))
@@ -212,6 +195,16 @@ def get_tile(player_id):
     form.tileid.data = str(tile_details.id)
     form.type.data = tile_data.tile_type_name
     form.content.data = tile_details.content
+
+    # Build monster HP status for the HP bar when this tile carries a monster.
+    monster_status = None
+    if tile_details.monster_current_hp is not None:
+        monster_status = {
+            "current_hp": tile_details.monster_current_hp,
+            "max_hp": tile_details.monster_max_hp,
+            "hp_percent": tile_details.monster_hp_percent * 100,
+            "is_alive": tile_details.is_monster_alive,
+        }
 
     # Check if tile has been actioned (readonly mode)
     if tile_details.action_taken:
@@ -231,6 +224,7 @@ def get_tile(player_id):
             tile_type_obj=tile_data.tile_type_obj,
             ascii_art=ascii_art,
             readonly=True,
+            monster_status=monster_status,
         )
 
     # Accrue points lazily on tile view
@@ -239,14 +233,18 @@ def get_tile(player_id):
     # Active tile - show available actions
     form.action.choices = [(action.code or str(action.id), action.name) for action in tile_data.allowed_actions]
     return render_template(
-        "gameTile.html", player_char=user_profile, form=form, tile_type_obj=tile_data.tile_type_obj, ascii_art=ascii_art
+        "gameTile.html",
+        player_char=user_profile,
+        form=form,
+        tile_type_obj=tile_data.tile_type_obj,
+        ascii_art=ascii_art,
+        monster_status=monster_status,
     )
 
 
 @main_bp.route("/player/<int:player_id>/game/tile/next", methods=["POST", "GET"])
 @login_required
 def generate_tile(player_id):
-    """Generate the next tile for a player"""
     """Generate the next tile for a player"""
     # Authorization check
     if current_user.id != player_id:
@@ -280,33 +278,10 @@ def generate_tile(player_id):
     if not tile_record.action_taken:
         return redirect(url_for("main.get_tile", player_id=player_id))
 
-    # At this point the previous tile was actioned; generate a fresh tile for the player (GET)
-    tile_type_list = [
-        {"name": tile_type.name, "id": tile_type.id}
-        for tile_type in model.TileTypeOption.query.order_by(model.TileTypeOption.name)
-    ]
-
-    current_tile = model.Tile()
-    current_tile.type = random.choice(tile_type_list)["id"]
-    current_tile.user_id = player_id
-    # preserve playthrough from previous tile when generating the next tile
-    current_tile.playthrough_id = tile_record.playthrough_id
-
-    # Generate and save content based on tile type
-    tile_config = gameTile.pqGameTile()
-    tile_type_obj = model.db.session.get(model.TileTypeOption, current_tile.type)
-    tile_type_name = tile_type_obj.name if tile_type_obj else None
-    if tile_type_name == "sign":
-        current_tile.content = tile_config.generate_signpost()
-    elif tile_type_name == "monster":
-        monster = pqMonsters.NPCMonster()
-        # Save monster name with HP in parentheses
-        current_tile.content = f"{monster.name} ({monster.hitpoints} HP)"
-    elif tile_type_name == "scene":
-        current_tile.content = "This is a scene tile"
-    elif tile_type_name == "treasure":
-        current_tile.content = "This is a treasure tile"
-
+    # At this point the previous tile was actioned; generate a fresh tile for the player.
+    # Route through TileService so monster HP/content are initialized consistently and the
+    # playthrough is preserved from the previous tile.
+    current_tile = tile_service.create_tile(player_id, tile_record.playthrough_id)
     model.db.session.add(current_tile)
     model.db.session.commit()
 
@@ -317,31 +292,31 @@ def generate_tile(player_id):
     tile_details = gameforms.TileForm(obj=current_tile)
     tile_details.tileid.data = str(current_tile.id)
     tile_details.type.data = tile_data.tile_type_name
-    tile_details.type.data = tile_data.tile_type_name
     tile_details.content.data = current_tile.content
-    # Filter available actions based on tile type (same as get_tile)
-    all_actions = model.ActionOption.query.order_by(model.ActionOption.name).all()
-    if tile_details.type.data == "sign":
-        # Sign tiles only allow rest, inspect, and quit
-        allowed_actions = [a for a in all_actions if a.name in ["rest", "inspect", "quit"]]
-    elif tile_details.type.data == "treasure":
-        # Treasure tiles disable fight
-        allowed_actions = [a for a in all_actions if a.name != "fight"]
-    else:
-        # Other tile types (monster, scene) allow all actions
-        allowed_actions = all_actions
-
     tile_details.action.choices = [(action.code or str(action.id), action.name) for action in tile_data.allowed_actions]
 
+    # Monster HP status for the HP bar on freshly generated monster tiles.
+    monster_status = None
+    if current_tile.monster_current_hp is not None:
+        monster_status = {
+            "current_hp": current_tile.monster_current_hp,
+            "max_hp": current_tile.monster_max_hp,
+            "hp_percent": current_tile.monster_hp_percent * 100,
+            "is_alive": current_tile.is_monster_alive,
+        }
+
     return render_template(
-        "gameTile.html", player_char=user_profile, form=tile_details, tile_type_obj=tile_data.tile_type_obj
+        "gameTile.html",
+        player_char=user_profile,
+        form=tile_details,
+        tile_type_obj=tile_data.tile_type_obj,
+        monster_status=monster_status,
     )
 
 
 @main_bp.route("/player/<int:player_id>/start_journey", methods=["POST"])
 @login_required
 def start_journey(player_id):
-    """Start a new journey/playthrough for a player"""
     """Start a new journey/playthrough for a player"""
     # Authorization check
     if current_user.id != player_id:
@@ -351,36 +326,9 @@ def start_journey(player_id):
     if not user_profile:
         abort(404)
 
-    # Create a new playthrough and initial tile for this player
-    new_play = model.Playthrough(user_id=player_id)
-    model.db.session.add(new_play)
-    model.db.session.flush()
-
-    # create first tile with content
-    tile_config = gameTile.pqGameTile()
-    tile_type_list = [
-        {"name": tile_type.name, "id": tile_type.id}
-        for tile_type in model.TileTypeOption.query.order_by(model.TileTypeOption.name)
-    ]
-    current_tile = model.Tile()
-    current_tile.type = random.choice(tile_type_list)["id"]
-    current_tile.user_id = player_id
-    current_tile.playthrough_id = new_play.id
-
-    # Generate and save content to database based on tile type
-    tile_type_obj = model.db.session.get(model.TileTypeOption, current_tile.type)
-    tile_type_name = tile_type_obj.name if tile_type_obj else None
-
-    if tile_type_name == "sign":
-        current_tile.content = tile_config.generate_signpost()
-    elif tile_type_name == "monster":
-        monster = pqMonsters.NPCMonster()
-        current_tile.content = f"{monster.name} ({monster.hitpoints} HP)"
-    elif tile_type_name == "scene":
-        current_tile.content = "This is a scene tile"
-    elif tile_type_name == "treasure":
-        current_tile.content = "This is a treasure tile"
-    model.db.session.add(current_tile)
+    # Create a new playthrough and initial tile for this player. TileService handles tile
+    # content and monster-HP initialization consistently.
+    new_play, current_tile = TileService().start_new_playthrough(player_id)
     model.db.session.commit()
 
     return redirect(url_for("main.get_tile", player_id=player_id))
@@ -390,7 +338,6 @@ def start_journey(player_id):
 @login_required
 def execute_tile_action(playerid, tile_id):
     """Execute an action on a tile using CombatService"""
-    """Execute an action on a tile using CombatService"""
     # Authorization check
     if current_user.id != playerid:
         abort(403)
@@ -399,7 +346,6 @@ def execute_tile_action(playerid, tile_id):
     if request.method != "POST":
         return {"status_code": 402}
 
-    # Detect AJAX/JSON requests - only check X-Requested-With header for stricter detection
     # Detect AJAX/JSON requests - only check X-Requested-With header for stricter detection
     is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
@@ -434,24 +380,7 @@ def execute_tile_action(playerid, tile_id):
                 if is_ajax:
                     return jsonify(error=error_msg), 400
                 abort(400, description=error_msg)
-        tile_record = combat_service.get_tile_with_lock(tile_id)
 
-        # Validate tile
-        is_valid, error_msg = combat_service.validate_tile_action(tile_record)
-        if not is_valid:
-            if error_msg == "Tile already actioned":
-                # Redirect to get_tile to show the tile in readonly mode
-                if is_ajax:
-                    return jsonify(redirect=url_for("main.get_tile", player_id=playerid)), 200
-                return redirect(url_for("main.get_tile", player_id=playerid))
-            else:
-                # Tile not found or other error
-                if is_ajax:
-                    return jsonify(error=error_msg), 400
-                abort(400, description=error_msg)
-
-        # Get player
-        # Get player
         # Get player
         player_record = model.db.session.get(model.User, playerid)
         if not player_record:
@@ -495,7 +424,6 @@ def execute_tile_action(playerid, tile_id):
                 tile=tile_record, player=player_record, action_history_id=action_history_id
             )
 
-    # Transaction committed here
     # Transaction committed here
 
     # Check if player is still alive after action

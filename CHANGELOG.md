@@ -2,6 +2,33 @@
 
 All notable changes to this project are documented here. This project follows a date-based changelog. For migration-specific details, see `MIGRATIONS.md`.
 
+## 2026-06-04
+
+### Added
+- XP & leveling: defeating a monster awards XP (scaled by its max HP); crossing the XP
+  curve levels the player up, granting max HP and healing. Level/XP shown in the status
+  bar and profile. Tunable via `XP_BASE`, `XP_GROWTH`, `HP_PER_LEVEL`, `XP_PER_MONSTER_HP`.
+- Defense stance: `Defend` (and defensive race abilities) now reduce the next incoming
+  counter-attack (new `tile.player_defense_pending`, migration `0009`).
+- Flee now works: success ends the encounter (no reward); failure provokes a free
+  counter-attack.
+
+### Fixed
+- Combat is winnable again: monster tiles created by the web routes now initialize
+  persistent monster HP (previously NULL), so attacks reduce HP and defeat completes the
+  tile. All tile creation goes through `TileService.create_tile`.
+- Monster tiles can no longer be bypassed by `inspect`/`rest` while the monster is alive.
+- Character setup now validates the form (and enforces CSRF) before saving.
+- Flashed messages now render on every page (login errors, out-of-points warnings, etc.).
+- AJAX combat survives tile re-renders: the combat modal reopens for follow-up attacks
+  (event delegation), the duplicate `#tile-mount` id is gone, and a monster HP bar is shown.
+- `init_defaults` no longer seeds duplicate player classes (was 6, now 3).
+- `_execute_quit` no longer rolls back the caller's transaction.
+
+### Changed
+- Single source of truth for monster HP; the tile's displayed HP matches combat HP.
+- Removed duplicated/merge-artifact code in `app.py` and `model.py`.
+
 ## 2025-12-11
 
 ### Added

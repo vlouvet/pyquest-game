@@ -1,22 +1,47 @@
-<div id="tile-mount">
-    <h1>PyQuest Game</h1>
-    <h2>Tile # {{ form.tileid.data }}</h2>
-    {% if ascii_art %}
-    <pre class="ascii-art">{{ ascii_art }}</pre>
-    {% elif tile_type_obj and tile_type_obj.ascii_art %}
-    <pre class="ascii-art">{{ tile_type_obj.ascii_art }}</pre>
-    {% endif %}
-    <form id="tile-form-inner" action="/player/{{ player_char.id }}/game/tile/next" method="post">
-        {{ form.csrf_token }}
-        <div>{{ form.type.label }}: {{ form.type }}</div>
-        <div>{{ form.content.label }}: {{ form.content }}</div>
-        <div>{{ form.action.label }}: {{ form.action }}</div>
-
-        <button id="take-action" type="submit" formaction="/player/{{ player_char.id }}/game/tile/{{ form.tileid.data }}/action">Take Action</button>
-        <input type="submit" value="Proceed to Next Tile">
-    </form>
-
-    {% if action_result %}
-        <div class="action-result"><strong>Result:</strong> {{ action_result }}</div>
-    {% endif %}
+{# Inner tile content. Rendered both inside #tile-mount on first load and returned as the
+   AJAX response body to replace #tile-mount. Must NOT include an #tile-mount wrapper (that
+   would create a duplicate id) and must NOT contain #action-feedback or the modal (those
+   live in gameTile.html so they survive innerHTML swaps). #}
+<div class="player-status" style="margin-bottom:8px;">
+    <strong>{{ player_char.username }}</strong>
+    — HP: {{ player_char.hitpoints }}/{{ player_char.max_hp }}
+    — Lvl: {{ player_char.level }} (XP: {{ player_char.exp_points }})
+    — Points: {{ points_balance if points_balance is defined else (player_char.points or 0) }}
 </div>
+<h2>Tile # {{ form.tileid.data }}</h2>
+
+{% if ascii_art %}
+<pre class="ascii-art">{{ ascii_art }}</pre>
+{% elif tile_type_obj and tile_type_obj.ascii_art %}
+<pre class="ascii-art">{{ tile_type_obj.ascii_art }}</pre>
+{% endif %}
+
+{% if monster_status is defined and monster_status %}
+<div class="monster-status" style="margin:8px 0;">
+    <div>Monster HP: {{ monster_status.current_hp }}/{{ monster_status.max_hp }}</div>
+    <div class="monster-hp-bar">
+        <div class="monster-hp-fill" style="width: {{ monster_status.hp_percent }}%;"></div>
+    </div>
+</div>
+{% endif %}
+
+<form id="tile-form"
+      data-player-id="{{ player_char.id }}"
+      data-tile-id="{{ form.tileid.data }}"
+      data-tile-type="{{ form.type.data }}"
+      action="/player/{{ player_char.id }}/game/tile/next" method="post">
+    {{ form.csrf_token }}
+    <div>{{ form.type.label }}: {{ form.type }}</div>
+    <div>{{ form.content.label }}: {{ form.content }}</div>
+    <div>{{ form.action.label }}: {{ form.action }}</div>
+
+    {% if not readonly %}
+    <button id="take-action" type="submit"
+            formaction="/player/{{ player_char.id }}/game/tile/{{ form.tileid.data }}/action">Take Action</button>
+    {% endif %}
+    <input type="submit" value="Proceed to Next Tile">
+</form>
+
+{% if action_result %}
+    <div class="action-result"><strong>Result:</strong> {{ action_result }}</div>
+{% endif %}
