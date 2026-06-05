@@ -196,6 +196,16 @@ def get_tile(player_id):
     form.type.data = tile_data.tile_type_name
     form.content.data = tile_details.content
 
+    # Build monster HP status for the HP bar when this tile carries a monster.
+    monster_status = None
+    if tile_details.monster_current_hp is not None:
+        monster_status = {
+            "current_hp": tile_details.monster_current_hp,
+            "max_hp": tile_details.monster_max_hp,
+            "hp_percent": tile_details.monster_hp_percent * 100,
+            "is_alive": tile_details.is_monster_alive,
+        }
+
     # Check if tile has been actioned (readonly mode)
     if tile_details.action_taken:
         # Show the actions that were taken
@@ -214,6 +224,7 @@ def get_tile(player_id):
             tile_type_obj=tile_data.tile_type_obj,
             ascii_art=ascii_art,
             readonly=True,
+            monster_status=monster_status,
         )
 
     # Accrue points lazily on tile view
@@ -222,7 +233,12 @@ def get_tile(player_id):
     # Active tile - show available actions
     form.action.choices = [(action.code or str(action.id), action.name) for action in tile_data.allowed_actions]
     return render_template(
-        "gameTile.html", player_char=user_profile, form=form, tile_type_obj=tile_data.tile_type_obj, ascii_art=ascii_art
+        "gameTile.html",
+        player_char=user_profile,
+        form=form,
+        tile_type_obj=tile_data.tile_type_obj,
+        ascii_art=ascii_art,
+        monster_status=monster_status,
     )
 
 
@@ -279,8 +295,22 @@ def generate_tile(player_id):
     tile_details.content.data = current_tile.content
     tile_details.action.choices = [(action.code or str(action.id), action.name) for action in tile_data.allowed_actions]
 
+    # Monster HP status for the HP bar on freshly generated monster tiles.
+    monster_status = None
+    if current_tile.monster_current_hp is not None:
+        monster_status = {
+            "current_hp": current_tile.monster_current_hp,
+            "max_hp": current_tile.monster_max_hp,
+            "hp_percent": current_tile.monster_hp_percent * 100,
+            "is_alive": current_tile.is_monster_alive,
+        }
+
     return render_template(
-        "gameTile.html", player_char=user_profile, form=tile_details, tile_type_obj=tile_data.tile_type_obj
+        "gameTile.html",
+        player_char=user_profile,
+        form=tile_details,
+        tile_type_obj=tile_data.tile_type_obj,
+        monster_status=monster_status,
     )
 
 

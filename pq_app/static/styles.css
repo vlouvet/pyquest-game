@@ -576,3 +576,22 @@ textarea[readonly] {
 .flash-success {
     border-left-color: var(--success-color);
 }
+
+/* ================================================================ */
+/* Monster HP bar */
+/* ================================================================ */
+.monster-hp-bar {
+    width: 100%;
+    max-width: 320px;
+    height: 14px;
+    background-color: var(--bg-dark);
+    border: 1px solid var(--primary-color);
+    border-radius: 7px;
+    overflow: hidden;
+}
+
+.monster-hp-fill {
+    height: 100%;
+    background-color: var(--danger-color);
+    transition: width 0.3s ease;
+}
